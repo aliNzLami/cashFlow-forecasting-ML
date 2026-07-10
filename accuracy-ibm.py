@@ -5,8 +5,7 @@
 # Author: Ali Nabizadeh Lamiry
 # Date: July 2026
 # Description: This script evaluates 5 ML models for predicting DaysToSettle
-#              using invoice data from SMEs. It implements a hybrid dataset
-#              approach combining IBM data with ICCMS feature engineering.
+#              using invoice data from SMEs. 
 # ============================================
 
 # ============================================
@@ -38,7 +37,7 @@ print("=" * 60)
 # ============================================
 print("\n[1] LOADING DATASET...")
 
-INPUT_FILE = 'WA_Fn-UseC_-Accounts-Receivable.csv'  # نام فایل دیتاست IBM
+INPUT_FILE = 'WA_Fn-UseC_-Accounts-Receivable.csv'  # file name
 OUTPUT_DIR = './results'
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -83,10 +82,10 @@ for col in date_cols:
         df[col] = pd.to_datetime(df[col], errors='coerce')
         print(f"   ✅ {col} converted to datetime.")
 
-# ساخت ویژگی Credit Period (تعداد روزهای اعتبار)
+# Credit Period 
 df['CreditPeriod'] = (df['DueDate'] - df['InvoiceDate']).dt.days
 
-# تبدیل متغیرهای دسته‌ای (Disputed, PaperlessBill) به 0 و 1
+# (Disputed, PaperlessBill) to 1 and 0
 if 'Disputed' in df.columns:
     df['Disputed'] = df['Disputed'].map({'Yes': 1, 'No': 0}).fillna(0).astype(int)
     print(f"   ✅ Disputed converted to binary.")
@@ -94,7 +93,7 @@ if 'PaperlessBill' in df.columns:
     df['PaperlessBill'] = df['PaperlessBill'].map({'Paper': 1, 'Electronic': 0}).fillna(0).astype(int)
     print(f"   ✅ PaperlessBill converted to binary.")
 
-# تعریف ویژگی‌ها و هدف
+# defien features
 feature_columns = [
     'InvoiceAmount',
     'DaysLate',
@@ -104,7 +103,7 @@ feature_columns = [
 ]
 target_column = 'DaysToSettle'
 
-# حذف رکوردهای دارای مقدار گمشده
+# remove lost records
 df_clean = df[feature_columns + [target_column]].dropna()
 print(f"   ✅ Records after cleaning: {len(df_clean)}")
 
