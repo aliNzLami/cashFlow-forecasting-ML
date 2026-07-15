@@ -14,22 +14,20 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 import xgboost as xgb
 import lightgbm as lgb
-import shap
-import matplotlib.pyplot as plt
 import warnings
 import os
 
 warnings.filterwarnings('ignore')
 
 print("=" * 60)
-print("CASH FLOW FORECASTING FOR SMES - IBM DATASET")
+print("CASH FLOW FORECASTING FOR SMES - IBM DATASET (FIXED v2)")
 print("=" * 60)
 
 # ============================================
@@ -37,7 +35,7 @@ print("=" * 60)
 # ============================================
 print("\n[1] LOADING DATASET...")
 
-INPUT_FILE = 'WA_Fn-UseC_-Accounts-Receivable.csv'  # file name
+INPUT_FILE = 'WA_Fn-UseC_-Accounts-Receivable.csv'  
 OUTPUT_DIR = './results'
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -66,16 +64,12 @@ if duplicate_cols:
 else:
     print(f"   ✅ No duplicate columns found.")
 
-print(f"\n   📋 Available columns:")
-for i, col in enumerate(df.columns):
-    print(f"      {i}: '{col}'")
-
 # ============================================
-# 4. FEATURE ENGINEERING
+# 4. FEATURE ENGINEERING (✅ CORRECTED)
 # ============================================
 print("\n[3] FEATURE ENGINEERING...")
 
-# تبدیل ستون‌های تاریخ به datetime
+# datetime
 date_cols = ['InvoiceDate', 'DueDate', 'SettledDate']
 for col in date_cols:
     if col in df.columns:
@@ -85,54 +79,66 @@ for col in date_cols:
 # Credit Period 
 df['CreditPeriod'] = (df['DueDate'] - df['InvoiceDate']).dt.days
 
-# (Disputed, PaperlessBill) to 1 and 0
+# Disputed & PaperlessBill 
 if 'Disputed' in df.columns:
     df['Disputed'] = df['Disputed'].map({'Yes': 1, 'No': 0}).fillna(0).astype(int)
     print(f"   ✅ Disputed converted to binary.")
 if 'PaperlessBill' in df.columns:
+    # Paper=1, Electronic=0
     df['PaperlessBill'] = df['PaperlessBill'].map({'Paper': 1, 'Electronic': 0}).fillna(0).astype(int)
     print(f"   ✅ PaperlessBill converted to binary.")
 
-# defien features
+# ============================================
+# 👇👇👇 CRITICAL CHANGE: TARGET & FEATURES DEFINITION
+# ============================================
+# ===== CHANGE 1: REMOVING 'DaysLate' and 'Disputed' from features =====
+# Because 'DaysLate' and 'Disputed' are not known at the time the invoice is issued.
+# Objective: To predict the number of days until full settlement (DaysToSettle) at the time of invoice issuance.
 feature_columns = [
-    'InvoiceAmount',
-    'DaysLate',
-    'CreditPeriod',
-    'Disputed',
-    'PaperlessBill'
+    'InvoiceAmount',      
+    'CreditPeriod',       
+    'PaperlessBill'       
 ]
 target_column = 'DaysToSettle'
 
-# remove lost records
-df_clean = df[feature_columns + [target_column]].dropna()
+df_clean = df[feature_columns + [target_column, 'InvoiceDate']].dropna()
 print(f"   ✅ Records after cleaning: {len(df_clean)}")
 
-X = df_clean[feature_columns]
-y = df_clean[target_column]
+# ============================================
+# 👇👇👇 CRITICAL CHANGE: TIME-SERIES SPLIT
+# ============================================
+# ===== CHANGE 2: SORTING BY DATE AND CHRONOLOGICAL SPLIT =====
+print("\n[4] TIME-SERIES TRAIN-TEST SPLIT...")
 
-print(f"   📊 Feature set: {feature_columns}")
-print(f"   🎯 Target variable: {target_column}")
+df_clean = df_clean.sort_values('InvoiceDate').reset_index(drop=True)
+
+split_idx = int(len(df_clean) * 0.7)
+train_data = df_clean.iloc[:split_idx]
+test_data = df_clean.iloc[split_idx:]
+
+X_train = train_data[feature_columns]
+y_train = train_data[target_column]
+X_test = test_data[feature_columns]
+y_test = test_data[target_column]
+
+print(f"   📊 Train period: {train_data['InvoiceDate'].min()} to {train_data['InvoiceDate'].max()}")
+print(f"   📊 Test period:  {test_data['InvoiceDate'].min()} to {test_data['InvoiceDate'].max()}")
+print(f"   📊 Training records: {len(X_train)}")
+print(f"   📊 Test records: {len(X_test)}")
 
 # ============================================
-# 5. TRAIN-TEST SPLIT & DATA SCALING
+# 5. DATA SCALING (FIT ON TRAIN ONLY)
 # ============================================
-print("\n[4] TRAIN-TEST SPLIT & SCALING...")
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+print("\n[5] DATA SCALING...")
 
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-print(f"   📊 Training data: {X_train_scaled.shape[0]} records")
-print(f"   📊 Test data: {X_test_scaled.shape[0]} records")
-
 # ============================================
-# 6. MODEL TRAINING & EVALUATION (RMSE, MAE, R²)
+# 6. MODEL TRAINING & EVALUATION
 # ============================================
-print("\n[5] TRAINING MACHINE LEARNING MODELS...")
+print("\n[6] TRAINING MACHINE LEARNING MODELS...")
 
 models = {
     'Linear Regression': LinearRegression(),
@@ -166,15 +172,18 @@ for name, model in models.items():
 # ============================================
 # 7. RESULTS TABLE
 # ============================================
-print("\n[6] RESULTS - MODEL COMPARISON (RMSE, MAE, R²)")
+print("\n[7] RESULTS - MODEL COMPARISON (REALISTIC - NO LEAKAGE)")
 
 results_df = pd.DataFrame(results).sort_values('RMSE')
 
-print("\n   📊 Table 1: Model Performance Comparison:")
+print("\n   📊 Table: Model Performance Comparison (Time-Series Validated):")
 print("   " + "-" * 65)
 print(results_df.to_string(index=False))
 print("   " + "-" * 65)
 
-results_df.to_csv(f'{OUTPUT_DIR}/ibm_results.csv', index=False)
-print(f"\n   💾 Saved to: {OUTPUT_DIR}/ibm_results.csv")
+results_df.to_csv(f'{OUTPUT_DIR}/ibm_results_fixed.csv', index=False)
+print(f"\n   💾 Saved to: {OUTPUT_DIR}/ibm_results_fixed.csv")
 
+print("\n" + "=" * 60)
+print("✅ ANALYSIS COMPLETE. Results are now realistic and publication-ready.")
+print("=" * 60)
