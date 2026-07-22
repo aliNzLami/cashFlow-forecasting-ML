@@ -26,6 +26,55 @@ import os
 
 warnings.filterwarnings('ignore')
 
+# ============================================
+# [NEW] 1.5. BOOTSTRAP FUNCTION FOR UNCERTAINTY
+# ============================================
+def bootstrap_metrics(y_true, y_pred, n_bootstrap=1000, random_state=42):
+    """
+    Calculates standard deviation and 95% CI for RMSE, MAE, R2 
+    using bootstrap resampling on the test set indices.
+    """
+    np.random.seed(random_state)
+    n = len(y_true)
+    # Convert to numpy arrays for faster indexing
+    y_true_np = y_true.values if hasattr(y_true, 'values') else np.array(y_true)
+    y_pred_np = y_pred if isinstance(y_pred, np.ndarray) else np.array(y_pred)
+    
+    rmse_list = []
+    mae_list = []
+    r2_list = []
+    
+    for _ in range(n_bootstrap):
+        # Sample with replacement from test indices
+        idx = np.random.choice(n, n, replace=True)
+        y_true_bs = y_true_np[idx]
+        y_pred_bs = y_pred_np[idx]
+        
+        rmse_list.append(np.sqrt(mean_squared_error(y_true_bs, y_pred_bs)))
+        mae_list.append(mean_absolute_error(y_true_bs, y_pred_bs))
+        r2_list.append(r2_score(y_true_bs, y_pred_bs))
+    
+    return {
+        'RMSE': {
+            'mean': np.mean(rmse_list),
+            'std': np.std(rmse_list),
+            'ci_lower': np.percentile(rmse_list, 2.5),
+            'ci_upper': np.percentile(rmse_list, 97.5)
+        },
+        'MAE': {
+            'mean': np.mean(mae_list),
+            'std': np.std(mae_list),
+            'ci_lower': np.percentile(mae_list, 2.5),
+            'ci_upper': np.percentile(mae_list, 97.5)
+        },
+        'R2': {
+            'mean': np.mean(r2_list),
+            'std': np.std(r2_list),
+            'ci_lower': np.percentile(r2_list, 2.5),
+            'ci_upper': np.percentile(r2_list, 97.5)
+        }
+    }
+
 print("=" * 60)
 print("CASH FLOW FORECASTING FOR SMES - IBM DATASET (FIXED v2)")
 print("=" * 60)
@@ -136,7 +185,7 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # ============================================
-# 6. MODEL TRAINING & EVALUATION
+# 6. MODEL TRAINING & EVALUATION (WITH BOOTSTRAP)
 # ============================================
 print("\n[6] TRAINING MACHINE LEARNING MODELS...")
 
@@ -150,40 +199,62 @@ models = {
 
 results = []
 predictions = {}
+trained_models = {}
 
 for name, model in models.items():
     print(f"   ▶️ Training {name}...")
     model.fit(X_train_scaled, y_train)
     y_pred = model.predict(X_test_scaled)
     predictions[name] = y_pred
+    trained_models[name] = model  # [NEW] برای ذخیره اگر لازم شد
     
+    # --- Original metrics ---
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
     
+    # ============================================
+    # [NEW] BOOTSTRAP UNCERTAINTY CALCULATION
+    # ============================================
+    bs = bootstrap_metrics(y_test, y_pred, n_bootstrap=500)  # 500 for speed
+    
     results.append({
         'Model': name,
         'RMSE': rmse,
+        'RMSE_std': bs['RMSE']['std'],
         'MAE': mae,
-        'R2': r2
+        'MAE_std': bs['MAE']['std'],
+        'R2': r2,
+        'R2_std': bs['R2']['std']
     })
-    print(f"      ✅ {name}: RMSE = {rmse:.4f}, MAE = {mae:.4f}, R2 = {r2:.4f}")
+    
+    # Print with ± format for quick review
+    print(f"      ✅ {name}: RMSE = {rmse:.4f} (±{bs['RMSE']['std']:.4f}), "
+          f"MAE = {mae:.4f} (±{bs['MAE']['std']:.4f}), "
+          f"R2 = {r2:.4f} (±{bs['R2']['std']:.4f})")
 
 # ============================================
-# 7. RESULTS TABLE
+# 7. RESULTS TABLE (WITH UNCERTAINTY)
 # ============================================
-print("\n[7] RESULTS - MODEL COMPARISON (REALISTIC - NO LEAKAGE)")
+print("\n[7] RESULTS - MODEL COMPARISON (WITH STD DEVIATION)")
 
 results_df = pd.DataFrame(results).sort_values('RMSE')
 
-print("\n   📊 Table: Model Performance Comparison (Time-Series Validated):")
-print("   " + "-" * 65)
-print(results_df.to_string(index=False))
-print("   " + "-" * 65)
+# Create a formatted string for LaTeX/Table
+print("\n   📊 Table: Model Performance Comparison (IBM - with Bootstrap Std):")
+print("   " + "-" * 90)
+print(f"   {'Model':<20} {'RMSE (±std)':<20} {'MAE (±std)':<20} {'R² (±std)'}")
+print("   " + "-" * 90)
+for _, row in results_df.iterrows():
+    print(f"   {row['Model']:<20} {row['RMSE']:.4f} ± {row['RMSE_std']:.4f}   "
+          f"{row['MAE']:.4f} ± {row['MAE_std']:.4f}   "
+          f"{row['R2']:.4f} ± {row['R2_std']:.4f}")
+print("   " + "-" * 90)
 
-results_df.to_csv(f'{OUTPUT_DIR}/ibm_results_fixed.csv', index=False)
-print(f"\n   💾 Saved to: {OUTPUT_DIR}/ibm_results_fixed.csv")
+# Save to CSV with std columns
+results_df.to_csv(f'{OUTPUT_DIR}/ibm_results_fixed_with_std.csv', index=False)
+print(f"\n   💾 Saved to: {OUTPUT_DIR}/ibm_results_fixed_with_std.csv")
 
 print("\n" + "=" * 60)
-print("✅ ANALYSIS COMPLETE. Results are now realistic and publication-ready.")
+print("✅ ANALYSIS COMPLETE. Results now include Bootstrap Standard Deviation.")
 print("=" * 60)
