@@ -47,6 +47,7 @@ Small and Medium Enterprises (SMEs) face significant liquidity risks due to unpr
 |── accuracy-uk.py                               # Accuracy Measurement for Payment Practices of UK Buyers
 |── interpret-ibm.py                             # Interpretation Measurement for IBM Late Payment Histories
 |── interpret-uk.py                              # Interpretation Measurement for Payment Practices of UK Buyers
+|── framework-decision.py                        # To assess which model is the best fit to a particular dataset
 └── README.md                                    # This file
 ```
 
@@ -88,9 +89,15 @@ Source: [UK Government Payment Practices](https://www.kaggle.com/datasets/saikir
 
 Task: Regression (Predict Average Time to Pay normalized to a 60-day threshold).
 
-Splitting: Grouped time-series split (70% oldest companies train, 30% newest test).
+Splitting: Grouped time-series split (70% of the oldest companies train, 30% of the newest test).
 
 Note: To use the exact preprocessed data, place the raw .csv files in the /data directory. The preprocessing scripts will automatically handle cleaning and scaling.
+
+3. Lending Club Loan Data
+
+Source: [Lending Club Loan Data](https://www.kaggle.com/datasets/wordsforthewise/lending-club)
+
+This dataset is used for our framework validation. Due to the large size of the Excel files, we considered using Python to download them automatically.
 
 ---
 
