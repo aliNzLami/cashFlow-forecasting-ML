@@ -1,7 +1,12 @@
 # ============================================================
 # Context-Aware Model Recommendation Framework
-# Automated execution for three expertise scenarios
-# Outputs saved to output_results.txt
+# Final Version - Using Coefficients from Table 10 for Weights
+# ============================================================
+# Changes from previous version:
+#   1. REMOVED CRITIC completely
+#   2. Weights are derived from the coefficients of the continuous mapping functions
+#   3. No more Scalability dominance
+#   4. Fully transparent and reproducible
 # ============================================================
 
 import sys
@@ -275,48 +280,37 @@ def compute_context_variables(indicators, manager_expertise):
 
 
 # ============================================================
-# SECTION 5: CRITIC WEIGHTS
+# SECTION 5: REQUIREMENT WEIGHTS FROM COEFFICIENTS (NEW - REPLACES CRITIC)
 # ============================================================
-def critic_weights_on_indicators(indicators, context):
+def get_requirement_weights_from_coefficients():
     """
-    CRITIC method using the already computed context variables (V, G, rho, etc.)
-    Representation Capacity weight is based ONLY on rho and Granularity (G).
+    Calculate requirement weights based on the coefficients from the
+    continuous mapping functions (Table 10 in Section 3.3).
+    
+    This completely replaces the CRITIC method which was causing
+    Scalability to dominate all other requirements.
+    
+    The coefficients are:
+    - Interpretability: 0.85 (alpha)
+    - Robustness: 0.70 (gamma)
+    - Scalability: 0.80 (zeta)
+    - Representation Capacity: 0.55 (theta)
+    
+    Returns a dictionary with normalized weights that sum to 1.
     """
-    V = context['V']
-    N = context['N']
-    G = context['G']
-    rho = context['rho']
+    alpha = 0.85   # Interpretability coefficient
+    gamma = 0.70   # Robustness coefficient
+    zeta = 0.80    # Scalability coefficient
+    theta = 0.55   # Representation Capacity coefficient
     
-    indicator_values = np.array([
-        indicators['missing_ratio'],      # 0
-        indicators['duplicate_ratio'],    # 1
-        indicators['outlier_ratio'],      # 2
-        indicators['feature_diversity'],  # 3
-        G,                                # 4 (granularity, scaled)
-        indicators['avg_correlation'],    # 5
-        rho,                              # 6 (feature-to-instance, scaled)
-        V                                 # 7 (volume, scaled)
-    ])
-    
-    min_vals = indicator_values.min()
-    max_vals = indicator_values.max()
-    normalized_indicators = (indicator_values - min_vals) / (max_vals - min_vals + 1e-6)
-    
-    weights = normalized_indicators / (normalized_indicators.sum() + 1e-6)
-    
-    req_weights = {
-        'Interpretability': float(0.6 * weights[6] + 0.4 * weights[5]),
-        'Robustness': float(0.5 * weights[0] + 0.3 * weights[1] + 0.2 * weights[2]),
-        'Scalability': float(weights[7]),
-        'Representation Capacity': float(0.6 * weights[6] + 0.4 * weights[4])
+    total = alpha + gamma + zeta + theta
+    weights = {
+        'Interpretability': alpha / total,
+        'Robustness': gamma / total,
+        'Scalability': zeta / total,
+        'Representation Capacity': theta / total
     }
-    
-    total = sum(req_weights.values())
-    if total > 0:
-        for key in req_weights:
-            req_weights[key] = float(req_weights[key] / total)
-    
-    return req_weights
+    return weights
 
 
 # ============================================================
@@ -325,7 +319,7 @@ def critic_weights_on_indicators(indicators, context):
 def continuous_mapping(V, N, G, rho, E):
     """
     Compute operational requirements using continuous mathematical functions
-    as defined in Section 3.3 of the revised paper.
+    as defined in Section 3.3 of the revised paper (Table 10).
     Returns a numpy array [r_interp, r_robust, r_scal, r_rep]
     """
     def sigmoid(x):
@@ -369,12 +363,14 @@ def get_capability_matrix():
 # SECTION 8: COMPATIBILITY METHODS
 # ============================================================
 def manhattan_score(requirement, capability, weights):
+    """S_i = 1 - Σ w_j × |r_j - a_ij|"""
     diff = np.abs(requirement - capability)
     weighted_diff = np.sum(weights * diff)
     return float(1.0 - weighted_diff)
 
 
 def euclidean_score(requirement, capability, weights):
+    """S_i = 1 - √(Σ w_j × (r_j - a_ij)²)"""
     diff = requirement - capability
     weighted_sq_diff = np.sum(weights * diff * diff)
     distance = np.sqrt(weighted_sq_diff)
@@ -387,7 +383,7 @@ def euclidean_score(requirement, capability, weights):
 def generate_report(indicators, context, req_weights, requirement,
                     capabilities, scores_manhattan, scores_euclidean,
                     manager_expertise):
-    """Generate report as a string (instead of printing)."""
+    """Generate report as a string."""
     expertise_label = "Expert" if manager_expertise >= 0.5 else "Non-Expert"
     model_names = list(capabilities.keys())
     
@@ -418,7 +414,7 @@ def generate_report(indicators, context, req_weights, requirement,
     lines.append(f"  rho (Feature/Instance) : {context['rho']:.6f}")
     lines.append(f"  Expertise (E)     : {context['E']:.4f}")
     
-    lines.append("\nCRITIC WEIGHTS (from data)")
+    lines.append("\nREQUIREMENT WEIGHTS (derived from coefficients in Table 10)")
     lines.append("-" * 60)
     req_names = ['Interpretability', 'Robustness', 'Scalability', 'Representation Capacity']
     for name in req_names:
@@ -430,13 +426,20 @@ def generate_report(indicators, context, req_weights, requirement,
     for name, val in zip(req_names, requirement):
         lines.append(f"  {name:20s}: {float(val):.4f}")
     
-    lines.append("\nCONTINUOUS MAPPING FUNCTIONS (from Section 3.3)")
+    lines.append("\nCONTINUOUS MAPPING FUNCTIONS (from Section 3.3, Table 10)")
     lines.append("-" * 60)
     lines.append("  r_interp = 0.85*(1 - sigmoid(10*(E-0.5))) + 0.15*rho")
     lines.append("  r_robust = 0.70*sigmoid(12*(N-0.35)) + 0.30*tanh(2*rho)")
     lines.append("  r_scal   = 0.80*tanh(3*V) + 0.20*G")
     lines.append("  r_rep    = 0.55*G + 0.45*E")
     lines.append("  (all values clipped and normalized to sum to 1)")
+    
+    lines.append("\nCOEFFICIENTS USED FOR WEIGHTS (from Table 10)")
+    lines.append("-" * 60)
+    lines.append("  Interpretability    : α = 0.85")
+    lines.append("  Robustness          : γ = 0.70")
+    lines.append("  Scalability         : ζ = 0.80")
+    lines.append("  Representation Cap. : θ = 0.55")
     
     lines.append("\nMODEL CAPABILITY PROFILES")
     lines.append("-" * 60)
@@ -488,7 +491,10 @@ def run_scenario(manager_expertise, file_path):
     
     indicators = compute_indicators_streaming(file_path, chunk_size=10000)
     context = compute_context_variables(indicators, manager_expertise)
-    req_weights = critic_weights_on_indicators(indicators, context)
+    
+    # NEW: Get weights from coefficients instead of CRITIC
+    req_weights = get_requirement_weights_from_coefficients()
+    
     requirement = context_to_requirement(context)
     
     weights_array = np.array([
@@ -519,7 +525,7 @@ def run_scenario(manager_expertise, file_path):
 def main():
     print("=" * 70)
     print("CONTEXT-AWARE MODEL RECOMMENDATION FRAMEWORK")
-    print("Automated execution for three expertise scenarios")
+    print("Version: Coefficient-based weights (CRITIC removed)")
     print("=" * 70)
     
     # Load dataset once
@@ -541,9 +547,13 @@ def main():
     # Write all reports to a single text file
     output_file = "output_results.txt"
     with open(output_file, "w", encoding="utf-8") as f:
+        f.write("=" * 70 + "\n")
         f.write("CONTEXT-AWARE MODEL RECOMMENDATION FRAMEWORK\n")
         f.write("RESULTS FOR THREE EXPERTISE SCENARIOS\n")
         f.write("=" * 70 + "\n")
+        f.write("Method: Coefficient-based weights (CRITIC removed)\n")
+        f.write("Weights derived from Table 10 coefficients: α=0.85, γ=0.70, ζ=0.80, θ=0.55\n")
+        f.write("=" * 70 + "\n\n")
         for i, (exp, report) in enumerate(zip(expertise_levels, all_reports), 1):
             f.write(f"\n{'#'*70}\n")
             f.write(f"# SCENARIO {i}: EXPERTISE = {exp:.2f}\n")
