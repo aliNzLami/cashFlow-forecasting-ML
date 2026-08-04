@@ -1,15 +1,15 @@
-# SME Cash Flow Forecasting: Accuracy vs. Interpretability
+# Decision-Making Framework on ML Model Selection for SME's Cash Flow Forecasting
 
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Paper](https://img.shields.io/badge/Paper-Submitted-brightgreen.svg)]()
+[![Paper](https://img.shields.io/badge/Paper-Submitted_to_Applied_Intelligence-brightgreen.svg)]()
 
 This repository contains the official implementation and replication code for the research paper:
 
-> **"Context-Aware Model Selection for SME Cash Flow Forecasting: A Leakage-Free Evaluation of Accuracy and Interpretability"**  
+> **"A Context-Aware Compatibility Framework for SME Cash Flow Forecasting: A Leakage-Free Evaluation of Accuracy and Interpretability"**  
 > *Submitted to Applied Intelligence (Springer)*
 
-This study rigorously evaluates five machine learning models—**Linear Regression, Random Forest, XGBoost, LightGBM, and Neural Network (MLP)**—for predicting SME cash flow. Unlike prior studies, we strictly prevent **look-ahead bias** using time-series validation, and we introduce a **novel dynamic decision framework (Ω)** to help non-technical SME managers select the optimal model based on data context.
+This study rigorously evaluates five machine learning models—**Linear Regression, Random Forest, XGBoost, LightGBM, and Neural Network (MLP)**—for predicting SME cash flow. Unlike prior studies, we strictly prevent **look-ahead bias** using time-series validation, and we introduce a **novel context-aware decision framework** based on **continuous mapping functions** to recommend the optimal model **before any training**, without relying on expensive AutoML or heuristic weighting schemes.
 
 ---
 
@@ -18,9 +18,14 @@ This study rigorously evaluates five machine learning models—**Linear Regressi
 Small and Medium Enterprises (SMEs) face significant liquidity risks due to unpredictable payment delays. While advanced ML models promise high accuracy, they often fail in practice due to **data leakage** and **lack of interpretability**.
 
 **Our key contributions are:**
-1.  **Leakage-Free Validation:** Removal of future-dependent features (e.g., `DaysLate`) and strict chronological train/test splits for realistic performance estimates.
-2.  **Comprehensive Interpretability:** Comparison of TreeSHAP, TreeInterpreter, LIME, and Captum (Integrated Gradients/DeepLIFT) across models.
-3.  **The Ω Framework:** A weighted decision rule (\( \Omega = 0.464L + 0.233\rho + 0.176E + 0.085V + 0.042\Phi \)) derived via **Analytic Hierarchy Process (AHP)** to recommend Linear Regression (for invoice-level data) or Random Forest (for firm-level data).
+
+1. **Leakage-Free Validation:** Removal of future-dependent features (e.g., `DaysLate`) and strict chronological train/test splits for realistic performance estimates.
+2. **Comprehensive Interpretability:** Comparison of TreeSHAP, TreeInterpreter, LIME, and Captum (Integrated Gradients/DeepLIFT) across five models, revealing internal inconsistencies in Neural Network attributions.
+3. **The Context-Aware Compatibility Framework (Training-Free):** 
+   - Translates **5 contextual attributes** (data volume, noise level, granularity, feature-to-instance ratio, and user expertise) into **4 operational requirements** (interpretability, robustness, scalability, and representation capacity) via **continuous mathematical functions** (sigmoid and hyperbolic tangent).
+   - Uses a **coefficient-based weighting scheme** (derived from the same functions, not data-dependent heuristics like CRITIC) with normalised weights: **Interpretability (0.293), Robustness (0.241), Scalability (0.276), and Representation Capacity (0.190)**.
+   - Recommends models via a **compatibility score** (Manhattan distance) with **O(m·k)** computational complexity—deployable on standard office hardware.
+4. **Empirical Validation:** Tested on two real-world SME datasets (IBM invoice-level, UK Government firm-level) and externally validated on the Lending Club dataset under three managerial expertise scenarios (non-expert, intermediate, expert).
 
 ---
 
@@ -31,8 +36,9 @@ Small and Medium Enterprises (SMEs) face significant liquidity risks due to unpr
 - **Dual Dataset Analysis:** 
   - *IBM Late Payment Histories* (Invoice-level, ~2.5k records)
   - *UK Government Payment Practices* (Firm-level, ~8k firms)
-- **Economic Impact:** Converts RMSE improvements into tangible monetary savings (£).
-- **Reproducible:** All random seeds are fixed (42) and the code is fully documented.
+- **External Validation:** Lending Club dataset (2.26M records, 151 features) for framework generalisability.
+- **Interpretability Suite:** TreeSHAP, TreeInterpreter, LIME, Integrated Gradients, and DeepLIFT.
+- **Reproducible:** All random seeds fixed (42), and the code is fully documented.
 
 ---
 
@@ -74,38 +80,19 @@ pip install numpy>=1.24.0 pandas>=2.0.0 scikit-learn>=1.3.0 xgboost>=2.0.0 light
 
 This study uses two independent datasets to validate generalizability.
 
-
-1. IBM Late Payment Histories (Invoice-Level)
-
-Source:  [Finance Factoring - IBM Late Payment Histories](https://www.kaggle.com/datasets/hhenry/finance-factoring-ibm-late-payment-histories/data)
-
-Task: Regression (Predict DaysToSettle).
-
-Process: Features are restricted to those available at invoice issuance (InvoiceAmount, CreditPeriod, PaperlessBill). DaysLate and Disputed are strictly excluded to prevent look-ahead bias.
-
-2. UK Government Payment Practices (Firm-Level)
-   
-Source: [UK Government Payment Practices](https://www.kaggle.com/datasets/saikiran0684/payment-practices-of-uk-buyers)
-
-Task: Regression (Predict Average Time to Pay normalized to a 60-day threshold).
-
-Splitting: Grouped time-series split (70% of the oldest companies train, 30% of the newest test).
-
-Note: To use the exact preprocessed data, place the raw .csv files in the /data directory. The preprocessing scripts will automatically handle cleaning and scaling.
-
-3. Lending Club Loan Data
-
-Source: [Lending Club Loan Data](https://www.kaggle.com/datasets/wordsforthewise/lending-club)
-
-This dataset is used for our framework validation. Due to the large size of the Excel files, we considered using Python to download them automatically.
+| **Dataset** | **Source** | **Task** | **Key Features / Preprocessing** | **Notes / Purpose** |
+| :--- | :--- | :--- | :--- | :--- |
+| **IBM Late Payment Histories** (Invoice-Level) | [Kaggle Link](https://www.kaggle.com/datasets/hhenry/finance-factoring-ibm-late-payment-histories/data) | Regression (Predict `DaysToSettle`) | Features restricted to those available at invoice issuance (`InvoiceAmount`, `CreditPeriod`, `PaperlessBill`). `DaysLate` and `Disputed` are strictly excluded to prevent look-ahead bias. | Used for core invoice-level accuracy and interpretability analysis. |
+| **UK Government Payment Practices** (Firm-Level) | [Kaggle Link](https://www.kaggle.com/datasets/saikiran0684/payment-practices-of-uk-buyers) | Regression (Predict Average Time to Pay normalized to a 60-day threshold) | Grouped time-series split (70% oldest companies train, 30% newest test). Place raw `.csv` files in `/data`; scripts handle cleaning and scaling automatically. | Used for core firm-level accuracy and interpretability analysis. |
+| **Lending Club Loan Data** (External Validation) | [Kaggle Link](https://www.kaggle.com/datasets/wordsforthewise/lending-club) | Framework Validation (Regression) | Not used in model training or framework calibration. Contains 2.26M rows and 151 features. | Used exclusively for framework validation under three managerial expertise scenarios (non-expert, intermediate, expert). |
 
 ---
 
 ## 📝 License
+
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-The underlying datasets retain their respective licenses (IBM under CC BY 4.0; UK Government under Open Government Licence v3.0).
-
+The underlying datasets retain their respective licenses (IBM under CC BY 4.0; UK Government under Open Government Licence v3.0; Lending Club under their own terms).
 
 ---
 
