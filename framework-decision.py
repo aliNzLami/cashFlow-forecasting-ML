@@ -354,7 +354,7 @@ def get_capability_matrix():
         'Random Forest': np.array([0.60, 0.90, 0.60, 0.80]),
         'XGBoost': np.array([0.30, 0.85, 0.80, 0.90]),
         'LightGBM': np.array([0.30, 0.85, 0.85, 0.90]),
-        'Neural Network': np.array([0.10, 0.50, 0.70, 1.00])
+        'Neural Network': np.array([0.10, 0.50, 0.50, 1.00])
     }
     return capabilities
 
