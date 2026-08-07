@@ -1,11 +1,15 @@
 # ============================================================
 # Context-Aware Model Recommendation Framework
-# Final Version - Using Coefficients from Table 10 for Weights
+# Final Version - Using Calibrated Coefficients (V8.0)
 # ============================================================
 # Changes from previous version:
 #   1. REMOVED CRITIC completely
 #   2. Weights are derived from the coefficients of the continuous mapping functions
-#   3. No more Scalability dominance
+#   3. Coefficients updated to calibrated values from V8.0:
+#      - Interpretability: 0.60
+#      - Robustness: 0.55
+#      - Scalability: 0.55
+#      - Representation Capacity: 0.80
 #   4. Fully transparent and reproducible
 # ============================================================
 
@@ -285,23 +289,23 @@ def compute_context_variables(indicators, manager_expertise):
 def get_requirement_weights_from_coefficients():
     """
     Calculate requirement weights based on the coefficients from the
-    continuous mapping functions (Table 10 in Section 3.3).
+    continuous mapping functions (calibrated V8.0 coefficients).
     
     This completely replaces the CRITIC method which was causing
     Scalability to dominate all other requirements.
     
-    The coefficients are:
-    - Interpretability: 0.85 (alpha)
-    - Robustness: 0.70 (gamma)
-    - Scalability: 0.80 (zeta)
-    - Representation Capacity: 0.55 (theta)
+    The calibrated coefficients are:
+    - Interpretability: 0.60 (a1)
+    - Robustness: 0.55 (a2)
+    - Scalability: 0.55 (a3)
+    - Representation Capacity: 0.80 (a4)
     
     Returns a dictionary with normalized weights that sum to 1.
     """
-    alpha = 0.85   # Interpretability coefficient
-    gamma = 0.70   # Robustness coefficient
-    zeta = 0.80    # Scalability coefficient
-    theta = 0.55   # Representation Capacity coefficient
+    alpha = 0.60   # Interpretability coefficient
+    gamma = 0.55   # Robustness coefficient
+    zeta = 0.55    # Scalability coefficient
+    theta = 0.80   # Representation Capacity coefficient
     
     total = alpha + gamma + zeta + theta
     weights = {
@@ -319,16 +323,16 @@ def get_requirement_weights_from_coefficients():
 def continuous_mapping(V, N, G, rho, E):
     """
     Compute operational requirements using continuous mathematical functions
-    as defined in Section 3.3 of the revised paper (Table 10).
+    as defined in Section 3.3 of the revised paper (calibrated V8.0 coefficients).
     Returns a numpy array [r_interp, r_robust, r_scal, r_rep]
     """
     def sigmoid(x):
         return 1.0 / (1.0 + np.exp(-x))
     
-    r_interp = 0.85 * (1 - sigmoid(10 * (E - 0.5))) + 0.15 * rho
-    r_robust = 0.70 * sigmoid(12 * (N - 0.35)) + 0.30 * np.tanh(2 * rho)
-    r_scal = 0.80 * np.tanh(3 * V) + 0.20 * G
-    r_rep = 0.55 * G + 0.45 * E
+    r_interp = 0.60 * (1 - sigmoid(10 * (E - 0.5))) + 0.40 * rho
+    r_robust = 0.55 * sigmoid(12 * (N - 0.35)) + 0.45 * np.tanh(2 * rho)
+    r_scal = 0.55 * np.tanh(3 * V) + 0.45 * G
+    r_rep = 0.80 * G + 0.20 * E
     
     r = np.array([r_interp, r_robust, r_scal, r_rep])
     r = np.clip(r, 0.0, 1.0)
@@ -414,7 +418,7 @@ def generate_report(indicators, context, req_weights, requirement,
     lines.append(f"  rho (Feature/Instance) : {context['rho']:.6f}")
     lines.append(f"  Expertise (E)     : {context['E']:.4f}")
     
-    lines.append("\nREQUIREMENT WEIGHTS (derived from coefficients in Table 10)")
+    lines.append("\nREQUIREMENT WEIGHTS (derived from calibrated coefficients)")
     lines.append("-" * 60)
     req_names = ['Interpretability', 'Robustness', 'Scalability', 'Representation Capacity']
     for name in req_names:
@@ -426,20 +430,20 @@ def generate_report(indicators, context, req_weights, requirement,
     for name, val in zip(req_names, requirement):
         lines.append(f"  {name:20s}: {float(val):.4f}")
     
-    lines.append("\nCONTINUOUS MAPPING FUNCTIONS (from Section 3.3, Table 10)")
+    lines.append("\nCONTINUOUS MAPPING FUNCTIONS (calibrated coefficients)")
     lines.append("-" * 60)
-    lines.append("  r_interp = 0.85*(1 - sigmoid(10*(E-0.5))) + 0.15*rho")
-    lines.append("  r_robust = 0.70*sigmoid(12*(N-0.35)) + 0.30*tanh(2*rho)")
-    lines.append("  r_scal   = 0.80*tanh(3*V) + 0.20*G")
-    lines.append("  r_rep    = 0.55*G + 0.45*E")
+    lines.append("  r_interp = 0.60*(1 - sigmoid(10*(E-0.5))) + 0.40*rho")
+    lines.append("  r_robust = 0.55*sigmoid(12*(N-0.35)) + 0.45*tanh(2*rho)")
+    lines.append("  r_scal   = 0.55*tanh(3*V) + 0.45*G")
+    lines.append("  r_rep    = 0.80*G + 0.20*E")
     lines.append("  (all values clipped and normalized to sum to 1)")
     
-    lines.append("\nCOEFFICIENTS USED FOR WEIGHTS (from Table 10)")
+    lines.append("\nCOEFFICIENTS USED FOR WEIGHTS (calibrated V8.0)")
     lines.append("-" * 60)
-    lines.append("  Interpretability    : α = 0.85")
-    lines.append("  Robustness          : γ = 0.70")
-    lines.append("  Scalability         : ζ = 0.80")
-    lines.append("  Representation Cap. : θ = 0.55")
+    lines.append("  Interpretability    : α = 0.60")
+    lines.append("  Robustness          : γ = 0.55")
+    lines.append("  Scalability         : ζ = 0.55")
+    lines.append("  Representation Cap. : θ = 0.80")
     
     lines.append("\nMODEL CAPABILITY PROFILES")
     lines.append("-" * 60)
@@ -525,7 +529,7 @@ def run_scenario(manager_expertise, file_path):
 def main():
     print("=" * 70)
     print("CONTEXT-AWARE MODEL RECOMMENDATION FRAMEWORK")
-    print("Version: Coefficient-based weights (CRITIC removed)")
+    print("Version: Calibrated coefficients V8.0 (CRITIC removed)")
     print("=" * 70)
     
     # Load dataset once
@@ -552,7 +556,8 @@ def main():
         f.write("RESULTS FOR THREE EXPERTISE SCENARIOS\n")
         f.write("=" * 70 + "\n")
         f.write("Method: Coefficient-based weights (CRITIC removed)\n")
-        f.write("Weights derived from Table 10 coefficients: α=0.85, γ=0.70, ζ=0.80, θ=0.55\n")
+        f.write("Calibrated coefficients (V8.0): α=0.60, γ=0.55, ζ=0.55, θ=0.80\n")
+        f.write("Normalized weights: Interp=0.240, Robust=0.220, Scal=0.220, RepCap=0.320\n")
         f.write("=" * 70 + "\n\n")
         for i, (exp, report) in enumerate(zip(expertise_levels, all_reports), 1):
             f.write(f"\n{'#'*70}\n")
