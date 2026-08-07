@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V4.4 - با Progress Indicator برای Lending Club
+Model-Free Calibration V4.6 - با متد جستجوی هوشمندانه (مثل کد موفق شما)
 Constraint: 95% of contexts must have D > 0.45
 """
 
@@ -13,7 +13,7 @@ import warnings
 from itertools import product
 
 # ============================================================
-# نصب خودکار
+# نصب خودکار کتابخانه‌ها
 # ============================================================
 def install(pkg):
     subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
@@ -72,7 +72,116 @@ def compute_dominance_ratio(ctx, a1, a2, a3, a4):
     return D
 
 # ============================================================
-# استخراج بافت از دیتاست‌ها (با Progress Indicator)
+# دانلود دیتاست‌ها با kagglehub (مثل کد موفق شما)
+# ============================================================
+def find_csv_file(download_path, keyword=None):
+    """پیدا کردن فایل CSV در پوشه دانلود شده بر اساس کلمه کلیدی"""
+    for root, _, files in os.walk(download_path):
+        for f in files:
+            if f.endswith('.csv') or f.endswith('.csv.gz'):
+                if keyword is None or keyword.lower() in f.lower():
+                    return os.path.join(root, f)
+    return None
+
+def load_ibm_data():
+    """بارگذاری دیتاست IBM با kagglehub"""
+    print("  [IBM] Downloading...")
+    try:
+        path = kagglehub.dataset_download("hhenry/finance-factoring-ibm-late-payment-histories")
+        csv_file = find_csv_file(path, "accounts")
+        if csv_file is None:
+            csv_file = find_csv_file(path)  # هر فایل CSV
+        if csv_file:
+            print(f"  ✅ Found: {os.path.basename(csv_file)}")
+            return pd.read_csv(csv_file)
+        else:
+            print("  ❌ No CSV found")
+            return None
+    except Exception as e:
+        print(f"  ❌ Error: {e}")
+        return None
+
+def load_uk_data():
+    """بارگذاری دیتاست UK با kagglehub"""
+    print("  [UK] Downloading...")
+    try:
+        path = kagglehub.dataset_download("saikiran0684/payment-practices-of-uk-buyers")
+        csv_file = find_csv_file(path, "payment")
+        if csv_file is None:
+            csv_file = find_csv_file(path)
+        if csv_file:
+            print(f"  ✅ Found: {os.path.basename(csv_file)}")
+            return pd.read_csv(csv_file)
+        else:
+            print("  ❌ No CSV found")
+            return None
+    except Exception as e:
+        print(f"  ❌ Error: {e}")
+        return None
+
+def load_lending_club_data():
+    """بارگذاری دیتاست Lending Club با kagglehub (دقیقاً مثل کد موفق شما)"""
+    print("  [Lending Club] Downloading (1.26GB)...")
+    try:
+        path = kagglehub.dataset_download("wordsforthewise/lending-club")
+        # جستجوی فایل حاوی 'accepted' (مثل کد شما)
+        csv_file = find_csv_file(path, "accepted")
+        if csv_file is None:
+            csv_file = find_csv_file(path)
+        if csv_file:
+            print(f"  ✅ Found: {os.path.basename(csv_file)}")
+            # خواندن فایل (حتی اگر gz باشد، pandas خودش مدیریت می‌کند)
+            return pd.read_csv(csv_file)
+        else:
+            print("  ❌ No accepted loans CSV found.")
+            return None
+    except Exception as e:
+        print(f"  ❌ Error: {e}")
+        return None
+
+def download_and_extract_real_contexts():
+    """بارگذاری هر سه دیتاست و استخراج بافت"""
+    loaders = [
+        ("IBM", load_ibm_data, "target"),
+        ("UK", load_uk_data, "target"),
+        ("Lending Club", load_lending_club_data, "target")
+    ]
+    
+    all_ctxs = []
+    E_levels = [0.0, 0.25, 0.5, 0.75, 1.0]
+    
+    print("\n" + "=" * 60)
+    print("📥 DOWNLOADING DATASETS WITH KAGGLEHUB")
+    print("=" * 60)
+    
+    for name, loader, target_col in loaders:
+        print(f"\n[{name}]")
+        start = time.time()
+        df = loader()
+        if df is None:
+            print(f"  ⚠️ Skipping {name}")
+            continue
+        
+        print(f"  📊 Loaded {df.shape[0]:,} rows, {df.shape[1]} columns")
+        
+        # استخراج بافت برای سطوح مختلف E
+        for E in E_levels:
+            try:
+                ctx = compute_context_from_df(df, target_col, E)
+                all_ctxs.append(ctx)
+            except Exception as e:
+                print(f"    ⚠️ E={E} error: {e}")
+        
+        elapsed = time.time() - start
+        print(f"  ✅ Extracted {len(E_levels)} contexts in {elapsed:.1f}s")
+    
+    print("\n" + "=" * 60)
+    print(f"✅ TOTAL: {len(all_ctxs)} real contexts extracted.")
+    print("=" * 60)
+    return all_ctxs
+
+# ============================================================
+# محاسبه بافت از DataFrame (همان قبلی)
 # ============================================================
 def compute_context_from_df(df, target_col='target', E=0.5):
     X = df.drop(columns=[target_col], errors='ignore')
@@ -105,68 +214,8 @@ def compute_context_from_df(df, target_col='target', E=0.5):
         G = np.clip(np.log10(max(n, 1)) / 6, 0, 1)
     return np.array([V, N, G, rho, E])
 
-def download_and_extract_real_contexts():
-    """هر سه دیتاست با نمایش پیشرفت در حین اکسترکت"""
-    sources = [
-        ("hhenry/finance-factoring-ibm-late-payment-histories", "target", "IBM"),
-        ("saikiran0684/payment-practices-of-uk-buyers", "target", "UK"),
-    ]
-    all_ctxs = []
-    E_levels = [0.0, 0.25, 0.5, 0.75, 1.0]
-    
-    print("\n" + "=" * 60)
-    print("📥 DOWNLOADING DATASETS FROM KAGGLE")
-    print("=" * 60)
-    
-    for src, target_col, name in sources:
-        print(f"\n[{name}] Starting download...")
-        start_time = time.time()
-        
-        try:
-            # دانلود (kagglehub خودش پیشرفت دانلود را نشان می‌دهد)
-            print(f"  ⏳ Downloading and extracting... (this may take a moment)")
-            path = kagglehub.dataset_download(src)
-            elapsed = time.time() - start_time
-            print(f"  ✅ Downloaded in {elapsed:.1f}s")
-            
-            # پیدا کردن فایل CSV
-            csv_files = []
-            for root, _, files in os.walk(path):
-                for f in files:
-                    if f.endswith('.csv'):
-                        csv_files.append(os.path.join(root, f))
-            
-            if not csv_files:
-                print(f"  ⚠️ No CSV found, skipping.")
-                continue
-            
-            # خواندن CSV
-            print(f"  📄 Loading CSV: {os.path.basename(csv_files[0])}...")
-            df = pd.read_csv(csv_files[0])
-            print(f"  ✅ Loaded {df.shape[0]:,} rows, {df.shape[1]} columns")
-            
-            # استخراج بافت برای سطوح مختلف E
-            print(f"  🔍 Extracting contexts for 5 E-levels...")
-            for E in E_levels:
-                try:
-                    ctx = compute_context_from_df(df, target_col, E)
-                    all_ctxs.append(ctx)
-                except Exception as e:
-                    print(f"    ⚠️ Error at E={E}: {e}")
-            
-            print(f"  ✅ Extracted {len(E_levels)} contexts from {name}")
-            
-        except Exception as e:
-            print(f"  ❌ FAILED: {e}")
-            # ادامه می‌دهیم تا دیتاست‌های دیگر دانلود شوند
-    
-    print("\n" + "=" * 60)
-    print(f"✅ TOTAL: {len(all_ctxs)} real contexts extracted from all datasets.")
-    print("=" * 60)
-    return all_ctxs
-
 # ============================================================
-# فضای مصنوعی
+# فضای مصنوعی و قیدها (همان V4.4)
 # ============================================================
 def generate_latin_hypercube(n=1500, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
@@ -181,9 +230,6 @@ def generate_grid(steps=6, low=0.05, high=0.95):
     grid = np.linspace(low, high, steps)
     return np.array(list(product(grid, repeat=5)))
 
-# ============================================================
-# قید: حداقل ۹۵٪ نقاط باید D > آستانه داشته باشند
-# ============================================================
 def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
     all_D = []
     for ctx in ctxs:
@@ -232,9 +278,6 @@ def grid_search(ctxs, step=0.05):
     feasible.sort(key=lambda x: x['sum_a'])
     return feasible
 
-# ============================================================
-# تحلیل
-# ============================================================
 def analyze(feasible):
     if not feasible:
         return {'status': 'NO FEASIBLE'}
@@ -264,12 +307,12 @@ def analyze(feasible):
 # ============================================================
 def main():
     print("=" * 80)
-    print("🚀 MODEL-FREE CALIBRATION V4.4")
-    print("3 Real Datasets (IBM + UK + Lending Club 1.26GB)")
-    print("Quantile-Based (95%) | Progress Indicator Enabled")
+    print("🚀 MODEL-FREE CALIBRATION V4.6")
+    print("kagglehub with smart file search (like your working code)")
+    print("3 Datasets | Quantile-Based (95%) | Threshold=0.45")
     print("=" * 80)
 
-    # دیتاست‌های واقعی (هر سه تا)
+    # دیتاست‌های واقعی
     real_ctxs = download_and_extract_real_contexts()
 
     # فضای مصنوعی
@@ -279,7 +322,6 @@ def main():
     synth = np.vstack([lhs, grid])
     print(f"  ✅ Synthetic: {len(synth)} points")
 
-    # ترکیب
     ctxs = list(synth) + list(real_ctxs)
     print(f"  📊 Total contexts: {len(ctxs)}")
 
@@ -324,11 +366,11 @@ def main():
         print(f"  Violations: {real_val['violations']}/{real_val['total']}")
         print(f"  Avg D: interp={real_val['avg_D'][0]:.3f}, robust={real_val['avg_D'][1]:.3f}, scal={real_val['avg_D'][2]:.3f}, rep={real_val['avg_D'][3]:.3f}")
 
-    # ذخیره JSON
     os.makedirs('output', exist_ok=True)
     report = {
         'methodology': 'Quantile-Based (95% contexts D > 0.45)',
-        'datasets_used': ['IBM Late Payment', 'UK Payment Practices', 'Lending Club'],
+        'datasets_used': ['IBM', 'UK', 'Lending Club'],
+        'downloader': 'kagglehub (with smart file search)',
         'context_range': '[0.05, 0.95]',
         'selected': best,
         'identifiability': result['status'],
