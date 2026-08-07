@@ -15,7 +15,7 @@ jobs:
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-        run: python scripts/calibrate.py
+        run: python calibrate.py
       - uses: actions/upload-artifact@v4
         with:
           name: report
