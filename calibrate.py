@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V7.1 - با آستانه‌ی تسلط ۰٫۷۰
-Local datasets (IBM + UK) + Synthetic contexts
-Time: ~3-5 minutes
+Model-Free Calibration V8.0 - FINAL
+Three datasets (IBM, UK, Lending Club) | Analytical derivatives
+Threshold: 0.70 | Quantile: 95% | Time: ~5-8 minutes
 """
 
 import os
@@ -13,14 +13,14 @@ import warnings
 from itertools import product
 
 # ============================================================
-# فلش کردن تمام پرینت‌ها
+# Force flush for all prints (GitHub Actions compatibility)
 # ============================================================
 def pprint(*args, **kwargs):
     kwargs.setdefault('flush', True)
     print(*args, **kwargs)
 
 # ============================================================
-# نصب خودکار کتابخانه‌ها
+# Auto-install dependencies
 # ============================================================
 def install(pkg):
     import subprocess
@@ -40,10 +40,17 @@ except ImportError:
     install("pandas")
     import pandas as pd
 
+try:
+    import kagglehub
+except ImportError:
+    pprint("Installing kagglehub...")
+    install("kagglehub")
+    import kagglehub
+
 warnings.filterwarnings('ignore')
 
 # ============================================================
-# توابع اصلی (با محاسبه‌ی تحلیلی مشتقات)
+# Core mathematical functions (analytical derivatives)
 # ============================================================
 def sigmoid(x):
     return 1 / (1 + np.exp(-x))
@@ -93,47 +100,8 @@ def compute_dominance_ratio(ctx, a1, a2, a3, a4):
     return D
 
 # ============================================================
-# بارگذاری دیتاست‌های محلی
+# Context extraction from DataFrames
 # ============================================================
-def load_local_datasets():
-    datasets = []
-    ibm_paths = [
-        "dataset/WA_Fn-UseC_-Accounts-Receivable.csv",
-        "WA_Fn-UseC_-Accounts-Receivable.csv",
-        "data/WA_Fn-UseC_-Accounts-Receivable.csv"
-    ]
-    uk_paths = [
-        "dataset/payment-practices.csv",
-        "payment-practices.csv",
-        "data/payment-practices.csv"
-    ]
-    
-    ibm_file = None
-    for p in ibm_paths:
-        if os.path.exists(p):
-            ibm_file = p
-            break
-    if ibm_file:
-        pprint(f"✅ Found IBM: {ibm_file}")
-        df = pd.read_csv(ibm_file)
-        datasets.append(("IBM", df, "target"))
-    else:
-        pprint("⚠️ IBM not found")
-    
-    uk_file = None
-    for p in uk_paths:
-        if os.path.exists(p):
-            uk_file = p
-            break
-    if uk_file:
-        pprint(f"✅ Found UK: {uk_file}")
-        df = pd.read_csv(uk_file)
-        datasets.append(("UK", df, "target"))
-    else:
-        pprint("⚠️ UK not found")
-    
-    return datasets
-
 def compute_context_from_df(df, target_col='target', E=0.5):
     X = df.drop(columns=[target_col], errors='ignore')
     n, p = X.shape
@@ -165,22 +133,104 @@ def compute_context_from_df(df, target_col='target', E=0.5):
         G = np.clip(np.log10(max(n, 1)) / 6, 0, 1)
     return np.array([V, N, G, rho, E])
 
+# ============================================================
+# Dataset loaders (local + kagglehub for Lending Club)
+# ============================================================
+def find_csv_file(download_path, keyword=None):
+    """Find the first CSV file in a directory, optionally matching a keyword."""
+    for root, _, files in os.walk(download_path):
+        for f in files:
+            if f.endswith('.csv') or f.endswith('.csv.gz'):
+                if keyword is None or keyword.lower() in f.lower():
+                    return os.path.join(root, f)
+    return None
+
+def load_ibm_data():
+    """Load IBM dataset from local path."""
+    paths = [
+        "dataset/WA_Fn-UseC_-Accounts-Receivable.csv",
+        "WA_Fn-UseC_-Accounts-Receivable.csv",
+        "data/WA_Fn-UseC_-Accounts-Receivable.csv"
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            pprint(f"  ✅ Found IBM locally: {p}")
+            return pd.read_csv(p)
+    pprint("  ⚠️ IBM not found locally.")
+    return None
+
+def load_uk_data():
+    """Load UK dataset from local path."""
+    paths = [
+        "dataset/payment-practices.csv",
+        "payment-practices.csv",
+        "data/payment-practices.csv"
+    ]
+    for p in paths:
+        if os.path.exists(p):
+            pprint(f"  ✅ Found UK locally: {p}")
+            return pd.read_csv(p)
+    pprint("  ⚠️ UK not found locally.")
+    return None
+
+def load_lending_club_data():
+    """Load Lending Club dataset via kagglehub."""
+    pprint("  [Lending Club] Downloading from Kaggle (1.26GB)...")
+    try:
+        path = kagglehub.dataset_download("wordsforthewise/lending-club")
+        csv_file = find_csv_file(path, "accepted")
+        if csv_file is None:
+            csv_file = find_csv_file(path)
+        if csv_file:
+            pprint(f"  ✅ Found: {os.path.basename(csv_file)}")
+            return pd.read_csv(csv_file)
+        else:
+            pprint("  ❌ No accepted loans CSV found.")
+            return None
+    except Exception as e:
+        pprint(f"  ❌ Lending Club download failed: {e}")
+        return None
+
+def load_all_datasets():
+    """Load all three datasets (IBM, UK, Lending Club)."""
+    datasets = []
+    
+    pprint("\n📂 Loading datasets...")
+    
+    # IBM
+    df = load_ibm_data()
+    if df is not None:
+        datasets.append(("IBM", df, "target"))
+    
+    # UK
+    df = load_uk_data()
+    if df is not None:
+        datasets.append(("UK", df, "target"))
+    
+    # Lending Club
+    df = load_lending_club_data()
+    if df is not None:
+        datasets.append(("Lending Club", df, "target"))
+    
+    return datasets
+
 def extract_contexts(datasets):
+    """Extract contexts from all datasets with 5 E-levels."""
     all_ctxs = []
     E_levels = [0.0, 0.25, 0.5, 0.75, 1.0]
     for name, df, target_col in datasets:
-        pprint(f"📊 {name}: {df.shape[0]:,} rows")
+        pprint(f"\n📊 {name}: {df.shape[0]:,} rows, {df.shape[1]} columns")
         for E in E_levels:
             try:
                 ctx = compute_context_from_df(df, target_col, E)
                 all_ctxs.append(ctx)
             except Exception as e:
-                pprint(f"  ⚠️ E={E}: {e}")
-        pprint(f"  ✅ {len(E_levels)} contexts")
+                pprint(f"  ⚠️ E={E} error: {e}")
+        pprint(f"  ✅ Extracted {len(E_levels)} contexts")
     return all_ctxs
 
 # ============================================================
-# فضای مصنوعی
+# Synthetic context space
 # ============================================================
 def generate_latin_hypercube(n=800, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
@@ -196,7 +246,7 @@ def generate_grid(steps=5, low=0.05, high=0.95):
     return np.array(list(product(grid, repeat=5)))
 
 # ============================================================
-# قیدها با آستانه‌ی ۰٫۷۰ (تغییر اصلی اینجاست)
+# Constraints with threshold = 0.70
 # ============================================================
 def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.70, quantile=0.95):
     all_D = []
@@ -227,15 +277,15 @@ def check_bounded(ctxs, a1, a2, a3, a4):
     return True
 
 # ============================================================
-# جستجوی شبکه‌ای
+# Grid search
 # ============================================================
 def grid_search(ctxs, step=0.05):
     vals = np.arange(0.50, 0.96, step)
     feasible = []
     total = len(vals) ** 4
     count = 0
-    pprint(f"\n🔍 Grid search over {total} combos...")
-    pprint(f"   Threshold = 0.70 | Using {min(2000, len(ctxs))} contexts per check")
+    pprint(f"\n🔍 Grid search over {total} combinations...")
+    pprint(f"   Threshold = 0.70 | Sampling {min(2000, len(ctxs))} contexts per check")
     sys.stdout.flush()
     
     start_time = time.time()
@@ -268,7 +318,7 @@ def grid_search(ctxs, step=0.05):
     return feasible
 
 # ============================================================
-# تأیید نهایی روی همه‌ی نقاط
+# Final verification on all contexts
 # ============================================================
 def final_verification(ctxs, candidates):
     verified = []
@@ -305,7 +355,7 @@ def final_verification(ctxs, candidates):
     return verified
 
 # ============================================================
-# تحلیل
+# Identifiability analysis
 # ============================================================
 def analyze(feasible):
     if not feasible:
@@ -332,27 +382,29 @@ def analyze(feasible):
     }
 
 # ============================================================
-# اجرا
+# Main execution
 # ============================================================
 def main():
     pprint("=" * 80)
-    pprint("🚀 MODEL-FREE CALIBRATION V7.1 (Threshold = 0.70)")
-    pprint("Analytical derivatives | Random sampling | ~3-5 minutes")
+    pprint("🚀 MODEL-FREE CALIBRATION V8.0 (FINAL)")
+    pprint("Three datasets: IBM + UK (local) + Lending Club (Kaggle)")
+    pprint("Analytical derivatives | Threshold: 0.70 | ~5-8 minutes")
     pprint("=" * 80)
     sys.stdout.flush()
 
-    pprint("\n📂 Loading local datasets...")
-    sys.stdout.flush()
-    datasets = load_local_datasets()
+    # Load all datasets
+    datasets = load_all_datasets()
+    
+    if not datasets:
+        pprint("\n❌ No datasets found. Exiting.")
+        sys.exit(1)
 
-    real_ctxs = []
-    if datasets:
-        real_ctxs = extract_contexts(datasets)
-        pprint(f"\n✅ {len(real_ctxs)} real contexts")
-    else:
-        pprint("\n⚠️ No local datasets. Synthetic only.")
+    # Extract real contexts
+    real_ctxs = extract_contexts(datasets)
+    pprint(f"\n✅ {len(real_ctxs)} real contexts extracted.")
     sys.stdout.flush()
 
+    # Generate synthetic contexts
     pprint("\n🧪 Generating synthetic contexts...")
     sys.stdout.flush()
     lhs = generate_latin_hypercube(800, 42, low=0.05, high=0.95)
@@ -361,11 +413,13 @@ def main():
     pprint(f"  ✅ {len(synth_ctxs)} synthetic contexts")
     sys.stdout.flush()
 
+    # Combine
     all_ctxs = list(synth_ctxs) + list(real_ctxs)
-    pprint(f"  📊 Total: {len(all_ctxs)} contexts")
+    pprint(f"  📊 Total contexts: {len(all_ctxs)}")
     sys.stdout.flush()
 
-    pprint("\n⏳ Starting grid search (Threshold = 0.70)...")
+    # Grid search
+    pprint("\n⏳ Starting grid search (threshold = 0.70)...")
     sys.stdout.flush()
     
     feasible = grid_search(all_ctxs, step=0.05)
@@ -375,6 +429,7 @@ def main():
         pprint("   Try lowering the threshold to 0.60 or 0.65.")
         sys.exit(1)
 
+    # Final verification
     verified = final_verification(all_ctxs, feasible)
     
     if not verified:
@@ -384,6 +439,7 @@ def main():
     result = analyze(verified)
     best = result['best']
 
+    # Output results
     pprint("\n" + "=" * 80)
     pprint("✅ FINAL RESULT (Threshold = 0.70)")
     pprint("=" * 80)
@@ -401,6 +457,7 @@ def main():
     
     sys.stdout.flush()
 
+    # Save report
     os.makedirs('output', exist_ok=True)
     report = {
         'methodology': 'Quantile-Based (95% contexts D > 0.70)',
