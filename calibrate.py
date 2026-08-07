@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V7.0 - ULTRA FAST (Optimized)
+Model-Free Calibration V7.1 - با آستانه‌ی تسلط ۰٫۷۰
 Local datasets (IBM + UK) + Synthetic contexts
 Time: ~3-5 minutes
 """
@@ -68,39 +68,21 @@ def compute_requirements(ctx, a1, a2, a3, a4):
     return np.array([r_interp, r_robust, r_scal, r_rep])
 
 def compute_analytical_sensitivity(ctx, a1, a2, a3, a4):
-    """
-    محاسبه‌ی تحلیلی مشتقات (بدون مشتق‌گیری عددی)
-    برگرداندن ماتریس ۴x۵: [requirement][variable]
-    """
     V, N, G, rho, E = ctx
     b1, b2, b3, b4 = 1 - a1, 1 - a2, 1 - a3, 1 - a4
     
     sens = np.zeros((4, 5))
-    
-    # r_interp: ∂/∂E, ∂/∂rho
-    sig_E = sigmoid(10 * (E - 0.5))
-    sens[0, 4] = -a1 * 10 * sigmoid_deriv(10 * (E - 0.5))  # ∂r_interp/∂E
-    sens[0, 3] = b1  # ∂r_interp/∂rho
-    
-    # r_robust: ∂/∂N, ∂/∂rho
-    sig_N = sigmoid(12 * (N - 0.35))
-    sens[1, 1] = a2 * 12 * sigmoid_deriv(12 * (N - 0.35))  # ∂r_robust/∂N
-    sens[1, 3] = b2 * 2 * tanh_deriv(2 * rho)  # ∂r_robust/∂rho
-    
-    # r_scal: ∂/∂V, ∂/∂G
-    sens[2, 0] = a3 * 3 * tanh_deriv(3 * V)  # ∂r_scal/∂V
-    sens[2, 2] = b3  # ∂r_scal/∂G
-    
-    # r_rep: ∂/∂G, ∂/∂E
-    sens[3, 2] = a4  # ∂r_rep/∂G
-    sens[3, 4] = b4  # ∂r_rep/∂E
-    
+    sens[0, 4] = -a1 * 10 * sigmoid_deriv(10 * (E - 0.5))
+    sens[0, 3] = b1
+    sens[1, 1] = a2 * 12 * sigmoid_deriv(12 * (N - 0.35))
+    sens[1, 3] = b2 * 2 * tanh_deriv(2 * rho)
+    sens[2, 0] = a3 * 3 * tanh_deriv(3 * V)
+    sens[2, 2] = b3
+    sens[3, 2] = a4
+    sens[3, 4] = b4
     return sens
 
 def compute_dominance_ratio(ctx, a1, a2, a3, a4):
-    """
-    محاسبه‌ی نسبت تسلط با مشتقات تحلیلی
-    """
     pairs = [(0, 4, 3), (1, 1, 3), (2, 0, 2), (3, 2, 4)]
     D = np.zeros(4)
     sm = compute_analytical_sensitivity(ctx, a1, a2, a3, a4)
@@ -198,7 +180,7 @@ def extract_contexts(datasets):
     return all_ctxs
 
 # ============================================================
-# فضای مصنوعی (تعداد کمتر برای سرعت)
+# فضای مصنوعی
 # ============================================================
 def generate_latin_hypercube(n=800, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
@@ -214,11 +196,10 @@ def generate_grid(steps=5, low=0.05, high=0.95):
     return np.array(list(product(grid, repeat=5)))
 
 # ============================================================
-# قیدها (با نمونه‌برداری تصادفی برای سرعت)
+# قیدها با آستانه‌ی ۰٫۷۰ (تغییر اصلی اینجاست)
 # ============================================================
-def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
+def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.70, quantile=0.95):
     all_D = []
-    # اگر تعداد نقاط زیاد است، نمونه‌برداری تصادفی انجام بده
     if len(ctxs) > 2000:
         idx = np.random.choice(len(ctxs), 2000, replace=False)
         sample_ctxs = [ctxs[i] for i in idx]
@@ -237,7 +218,6 @@ def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
     return True
 
 def check_bounded(ctxs, a1, a2, a3, a4):
-    # فقط روی نمونه‌ای کوچک بررسی کن
     sample_size = min(500, len(ctxs))
     idx = np.random.choice(len(ctxs), sample_size, replace=False)
     for i in idx:
@@ -247,7 +227,7 @@ def check_bounded(ctxs, a1, a2, a3, a4):
     return True
 
 # ============================================================
-# جستجوی شبکه‌ای (سریع)
+# جستجوی شبکه‌ای
 # ============================================================
 def grid_search(ctxs, step=0.05):
     vals = np.arange(0.50, 0.96, step)
@@ -255,7 +235,7 @@ def grid_search(ctxs, step=0.05):
     total = len(vals) ** 4
     count = 0
     pprint(f"\n🔍 Grid search over {total} combos...")
-    pprint(f"   Using {min(2000, len(ctxs))} random contexts per check")
+    pprint(f"   Threshold = 0.70 | Using {min(2000, len(ctxs))} contexts per check")
     sys.stdout.flush()
     
     start_time = time.time()
@@ -291,30 +271,26 @@ def grid_search(ctxs, step=0.05):
 # تأیید نهایی روی همه‌ی نقاط
 # ============================================================
 def final_verification(ctxs, candidates):
-    """تأیید کاندیدهای برتر روی همه‌ی نقاط"""
     verified = []
     pprint(f"\n🔍 Final verification on all {len(ctxs)} contexts...")
     sys.stdout.flush()
     
-    for cand in candidates[:20]:  # فقط ۲۰ کاندید برتر را بررسی کن
+    for cand in candidates[:20]:
         a1, a2, a3, a4 = cand['a1'], cand['a2'], cand['a3'], cand['a4']
-        # بررسی کامل روی همه‌ی نقاط
         all_D = []
         for ctx in ctxs:
             D = compute_dominance_ratio(ctx, a1, a2, a3, a4)
             all_D.append(D)
         all_D = np.array(all_D)
         
-        # بررسی شرط صدکی
         passes = True
         for req_idx in range(4):
             D_req = all_D[:, req_idx]
             q = np.quantile(D_req, 0.95)
-            if q <= 0.45:
+            if q <= 0.70:
                 passes = False
                 break
         
-        # بررسی کران‌ها
         bounded = True
         for ctx in ctxs:
             r = compute_requirements(ctx, a1, a2, a3, a4)
@@ -360,7 +336,7 @@ def analyze(feasible):
 # ============================================================
 def main():
     pprint("=" * 80)
-    pprint("🚀 MODEL-FREE CALIBRATION V7.0 (ULTRA FAST)")
+    pprint("🚀 MODEL-FREE CALIBRATION V7.1 (Threshold = 0.70)")
     pprint("Analytical derivatives | Random sampling | ~3-5 minutes")
     pprint("=" * 80)
     sys.stdout.flush()
@@ -380,7 +356,7 @@ def main():
     pprint("\n🧪 Generating synthetic contexts...")
     sys.stdout.flush()
     lhs = generate_latin_hypercube(800, 42, low=0.05, high=0.95)
-    grid = generate_grid(5, low=0.05, high=0.95)  # 5^5 = 3125
+    grid = generate_grid(5, low=0.05, high=0.95)
     synth_ctxs = np.vstack([lhs, grid])
     pprint(f"  ✅ {len(synth_ctxs)} synthetic contexts")
     sys.stdout.flush()
@@ -389,16 +365,16 @@ def main():
     pprint(f"  📊 Total: {len(all_ctxs)} contexts")
     sys.stdout.flush()
 
-    pprint("\n⏳ Starting fast grid search (sampling 2000 contexts per check)...")
+    pprint("\n⏳ Starting grid search (Threshold = 0.70)...")
     sys.stdout.flush()
     
     feasible = grid_search(all_ctxs, step=0.05)
 
     if not feasible:
-        pprint("\n❌ No feasible coefficients found.")
+        pprint("\n❌ No feasible coefficients found with threshold 0.70.")
+        pprint("   Try lowering the threshold to 0.60 or 0.65.")
         sys.exit(1)
 
-    # تأیید نهایی روی همه‌ی نقاط
     verified = final_verification(all_ctxs, feasible)
     
     if not verified:
@@ -409,7 +385,7 @@ def main():
     best = result['best']
 
     pprint("\n" + "=" * 80)
-    pprint("✅ FINAL RESULT")
+    pprint("✅ FINAL RESULT (Threshold = 0.70)")
     pprint("=" * 80)
     pprint(f"a1 = {best['a1']:.2f}  (Interpretability)")
     pprint(f"a2 = {best['a2']:.2f}  (Robustness)")
@@ -417,11 +393,17 @@ def main():
     pprint(f"a4 = {best['a4']:.2f}  (Rep. Capacity)")
     pprint(f"Sum = {result['best_sum']:.2f}")
     pprint(f"Identifiability: {result['status']}")
+    
+    if result['status'] == 'WEAK':
+        pprint("\n  Near-optimal ranges:")
+        for k, v in result['ranges'].items():
+            pprint(f"    {k}: [{v['min']:.2f}, {v['max']:.2f}] (std={v['std']:.3f})")
+    
     sys.stdout.flush()
 
     os.makedirs('output', exist_ok=True)
     report = {
-        'methodology': 'Quantile-Based (95% contexts D > 0.45)',
+        'methodology': 'Quantile-Based (95% contexts D > 0.70)',
         'datasets_used': [name for name, _, _ in datasets],
         'synthetic_contexts': len(synth_ctxs),
         'real_contexts': len(real_ctxs),
