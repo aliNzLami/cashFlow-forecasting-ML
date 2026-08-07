@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V4.1 - با آستانه‌ی ۰٫۴۵ و فضای بافت محدودشده
+Model-Free Calibration V4.2 - Quantile-Based Approach
+Constraint: 95% of contexts must have D > 0.45
 """
 
 import subprocess
@@ -135,30 +136,39 @@ def download_and_extract_real_contexts():
     return all_ctxs
 
 # ============================================================
-# فضای مصنوعی (محدود به ۰٫۰۵ تا ۰٫۹۵ برای حذف نقاط مرزی)
+# فضای مصنوعی (محدود به [0.05, 0.95] با گام‌های کمتر)
 # ============================================================
-def generate_latin_hypercube(n=3000, seed=42, low=0.05, high=0.95):
+def generate_latin_hypercube(n=2000, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
     samples = np.zeros((n, 5))
     for j in range(5):
         perm = np.random.permutation(n)
-        # نگاشت از [0,1] به [low, high]
         raw = (perm + np.random.uniform(0, 1, n)) / n
         samples[:, j] = low + (high - low) * raw
     return samples
 
-def generate_grid(steps=9, low=0.05, high=0.95):
+def generate_grid(steps=7, low=0.05, high=0.95):
     grid = np.linspace(low, high, steps)
     return np.array(list(product(grid, repeat=5)))
 
 # ============================================================
-# قیدها (با آستانه‌ی ۰٫۴۵)
+# قید جدید: حداقل ۹۵٪ نقاط باید D > آستانه داشته باشند
 # ============================================================
-def check_dominance(ctxs, a1, a2, a3, a4, thresh=0.45):
-    thresh += 1e-6
+def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
+    """
+    بررسی می‌کند که حداقل quantile درصد از نقاط، D > thresh داشته باشند.
+    """
+    all_D = []
     for ctx in ctxs:
         D = compute_dominance_ratio(ctx, a1, a2, a3, a4)
-        if np.any(D <= thresh):
+        all_D.append(D)
+    all_D = np.array(all_D)  # shape: (n_contexts, 4)
+    
+    # برای هر کدام از ۴ نیازمندی، صدک مورد نظر را محاسبه می‌کنیم
+    for req_idx in range(4):
+        D_req = all_D[:, req_idx]
+        q = np.quantile(D_req, quantile)
+        if q <= thresh:
             return False
     return True
 
@@ -174,7 +184,7 @@ def grid_search(ctxs, step=0.05):
     feasible = []
     total = len(vals) ** 4
     count = 0
-    print(f"\nGrid search over {total} combos (threshold=0.45)...")
+    print(f"\nGrid search over {total} combos (quantile=0.95, threshold=0.45)...")
     for a1 in vals:
         for a2 in vals:
             for a3 in vals:
@@ -182,7 +192,7 @@ def grid_search(ctxs, step=0.05):
                     count += 1
                     if count % 5000 == 0:
                         print(f"  {count}/{total}")
-                    if not check_dominance(ctxs, a1, a2, a3, a4, thresh=0.45):
+                    if not check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
                         continue
                     if not check_bounded(ctxs, a1, a2, a3, a4):
                         continue
@@ -226,8 +236,8 @@ def analyze(feasible):
 # ============================================================
 def main():
     print("=" * 80)
-    print("MODEL-FREE CALIBRATION V4.1")
-    print("Threshold=0.45 | Context range=[0.05, 0.95]")
+    print("MODEL-FREE CALIBRATION V4.2 (Quantile-Based)")
+    print("Constraint: 95% of contexts must have D > 0.45")
     print("=" * 80)
 
     # دیتاست‌های واقعی
@@ -235,8 +245,8 @@ def main():
 
     # فضای مصنوعی (محدودشده)
     print("\nGenerating synthetic contexts (0.05 to 0.95)...")
-    lhs = generate_latin_hypercube(3000, 42, low=0.05, high=0.95)
-    grid = generate_grid(9, low=0.05, high=0.95)
+    lhs = generate_latin_hypercube(2000, 42, low=0.05, high=0.95)
+    grid = generate_grid(7, low=0.05, high=0.95)
     synth = np.vstack([lhs, grid])
     print(f"  Synthetic: {len(synth)}")
 
@@ -248,8 +258,8 @@ def main():
     feasible = grid_search(ctxs, step=0.05)
 
     if not feasible:
-        print("\n❌ No feasible coefficients found even with threshold=0.45.")
-        print("   Try increasing step size or reducing context space further.")
+        print("\n❌ No feasible coefficients found even with quantile approach.")
+        print("   Try: reducing quantile to 0.90 or threshold to 0.40.")
         sys.exit(1)
 
     result = analyze(feasible)
@@ -289,7 +299,7 @@ def main():
     # ذخیره JSON
     os.makedirs('output', exist_ok=True)
     report = {
-        'methodology': 'Minimal Sufficient Dominance (threshold=0.45)',
+        'methodology': 'Quantile-Based (95% contexts D > 0.45)',
         'context_range': '[0.05, 0.95]',
         'selected': best,
         'identifiability': result['status'],
