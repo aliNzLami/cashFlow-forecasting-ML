@@ -110,7 +110,6 @@ def download_and_extract_real_contexts():
     sources = [
         ("hhenry/finance-factoring-ibm-late-payment-histories", "target", "IBM"),
         ("saikiran0684/payment-practices-of-uk-buyers", "target", "UK"),
-        ("wordsforthewise/lending-club", "target", "Lending Club (1.26GB)")
     ]
     all_ctxs = []
     E_levels = [0.0, 0.25, 0.5, 0.75, 1.0]
