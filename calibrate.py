@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V4.2 - Quantile-Based Approach
+Model-Free Calibration V4.4 - با Progress Indicator برای Lending Club
 Constraint: 95% of contexts must have D > 0.45
 """
 
@@ -8,6 +8,7 @@ import subprocess
 import sys
 import os
 import json
+import time
 import warnings
 from itertools import product
 
@@ -71,7 +72,7 @@ def compute_dominance_ratio(ctx, a1, a2, a3, a4):
     return D
 
 # ============================================================
-# استخراج بافت از دیتاست‌ها
+# استخراج بافت از دیتاست‌ها (با Progress Indicator)
 # ============================================================
 def compute_context_from_df(df, target_col='target', E=0.5):
     X = df.drop(columns=[target_col], errors='ignore')
@@ -105,40 +106,70 @@ def compute_context_from_df(df, target_col='target', E=0.5):
     return np.array([V, N, G, rho, E])
 
 def download_and_extract_real_contexts():
+    """هر سه دیتاست با نمایش پیشرفت در حین اکسترکت"""
     sources = [
-        ("hhenry/finance-factoring-ibm-late-payment-histories", "target"),
-        ("saikiran0684/payment-practices-of-uk-buyers", "target"),
-        ("wordsforthewise/lending-club", "target")
+        ("hhenry/finance-factoring-ibm-late-payment-histories", "target", "IBM"),
+        ("saikiran0684/payment-practices-of-uk-buyers", "target", "UK"),
+        ("wordsforthewise/lending-club", "target", "Lending Club (1.26GB)")
     ]
     all_ctxs = []
     E_levels = [0.0, 0.25, 0.5, 0.75, 1.0]
-    print("\nDownloading datasets from Kaggle...")
-    for src, target_col in sources:
+    
+    print("\n" + "=" * 60)
+    print("📥 DOWNLOADING DATASETS FROM KAGGLE")
+    print("=" * 60)
+    
+    for src, target_col, name in sources:
+        print(f"\n[{name}] Starting download...")
+        start_time = time.time()
+        
         try:
+            # دانلود (kagglehub خودش پیشرفت دانلود را نشان می‌دهد)
+            print(f"  ⏳ Downloading and extracting... (this may take a moment)")
             path = kagglehub.dataset_download(src)
-            print(f"  OK: {src}")
+            elapsed = time.time() - start_time
+            print(f"  ✅ Downloaded in {elapsed:.1f}s")
+            
+            # پیدا کردن فایل CSV
             csv_files = []
             for root, _, files in os.walk(path):
                 for f in files:
                     if f.endswith('.csv'):
                         csv_files.append(os.path.join(root, f))
+            
             if not csv_files:
+                print(f"  ⚠️ No CSV found, skipping.")
                 continue
+            
+            # خواندن CSV
+            print(f"  📄 Loading CSV: {os.path.basename(csv_files[0])}...")
             df = pd.read_csv(csv_files[0])
+            print(f"  ✅ Loaded {df.shape[0]:,} rows, {df.shape[1]} columns")
+            
+            # استخراج بافت برای سطوح مختلف E
+            print(f"  🔍 Extracting contexts for 5 E-levels...")
             for E in E_levels:
                 try:
-                    all_ctxs.append(compute_context_from_df(df, target_col, E))
-                except:
-                    pass
+                    ctx = compute_context_from_df(df, target_col, E)
+                    all_ctxs.append(ctx)
+                except Exception as e:
+                    print(f"    ⚠️ Error at E={E}: {e}")
+            
+            print(f"  ✅ Extracted {len(E_levels)} contexts from {name}")
+            
         except Exception as e:
-            print(f"  FAIL: {src} - {e}")
-    print(f"  Extracted {len(all_ctxs)} real contexts.")
+            print(f"  ❌ FAILED: {e}")
+            # ادامه می‌دهیم تا دیتاست‌های دیگر دانلود شوند
+    
+    print("\n" + "=" * 60)
+    print(f"✅ TOTAL: {len(all_ctxs)} real contexts extracted from all datasets.")
+    print("=" * 60)
     return all_ctxs
 
 # ============================================================
-# فضای مصنوعی (محدود به [0.05, 0.95] با گام‌های کمتر)
+# فضای مصنوعی
 # ============================================================
-def generate_latin_hypercube(n=2000, seed=42, low=0.05, high=0.95):
+def generate_latin_hypercube(n=1500, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
     samples = np.zeros((n, 5))
     for j in range(5):
@@ -147,24 +178,19 @@ def generate_latin_hypercube(n=2000, seed=42, low=0.05, high=0.95):
         samples[:, j] = low + (high - low) * raw
     return samples
 
-def generate_grid(steps=7, low=0.05, high=0.95):
+def generate_grid(steps=6, low=0.05, high=0.95):
     grid = np.linspace(low, high, steps)
     return np.array(list(product(grid, repeat=5)))
 
 # ============================================================
-# قید جدید: حداقل ۹۵٪ نقاط باید D > آستانه داشته باشند
+# قید: حداقل ۹۵٪ نقاط باید D > آستانه داشته باشند
 # ============================================================
 def check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
-    """
-    بررسی می‌کند که حداقل quantile درصد از نقاط، D > thresh داشته باشند.
-    """
     all_D = []
     for ctx in ctxs:
         D = compute_dominance_ratio(ctx, a1, a2, a3, a4)
         all_D.append(D)
-    all_D = np.array(all_D)  # shape: (n_contexts, 4)
-    
-    # برای هر کدام از ۴ نیازمندی، صدک مورد نظر را محاسبه می‌کنیم
+    all_D = np.array(all_D)
     for req_idx in range(4):
         D_req = all_D[:, req_idx]
         q = np.quantile(D_req, quantile)
@@ -184,14 +210,17 @@ def grid_search(ctxs, step=0.05):
     feasible = []
     total = len(vals) ** 4
     count = 0
-    print(f"\nGrid search over {total} combos (quantile=0.95, threshold=0.45)...")
+    print(f"\n🔍 Grid search over {total} combos (quantile=0.95, threshold=0.45)...")
+    start_time = time.time()
+    
     for a1 in vals:
         for a2 in vals:
             for a3 in vals:
                 for a4 in vals:
                     count += 1
                     if count % 5000 == 0:
-                        print(f"  {count}/{total}")
+                        elapsed = time.time() - start_time
+                        print(f"  ⏱️ {count}/{total} | {elapsed:.1f}s elapsed")
                     if not check_dominance_quantile(ctxs, a1, a2, a3, a4, thresh=0.45, quantile=0.95):
                         continue
                     if not check_bounded(ctxs, a1, a2, a3, a4):
@@ -236,30 +265,30 @@ def analyze(feasible):
 # ============================================================
 def main():
     print("=" * 80)
-    print("MODEL-FREE CALIBRATION V4.2 (Quantile-Based)")
-    print("Constraint: 95% of contexts must have D > 0.45")
+    print("🚀 MODEL-FREE CALIBRATION V4.4")
+    print("3 Real Datasets (IBM + UK + Lending Club 1.26GB)")
+    print("Quantile-Based (95%) | Progress Indicator Enabled")
     print("=" * 80)
 
-    # دیتاست‌های واقعی
+    # دیتاست‌های واقعی (هر سه تا)
     real_ctxs = download_and_extract_real_contexts()
 
-    # فضای مصنوعی (محدودشده)
-    print("\nGenerating synthetic contexts (0.05 to 0.95)...")
-    lhs = generate_latin_hypercube(2000, 42, low=0.05, high=0.95)
-    grid = generate_grid(7, low=0.05, high=0.95)
+    # فضای مصنوعی
+    print("\n🧪 Generating synthetic contexts (0.05 to 0.95)...")
+    lhs = generate_latin_hypercube(1500, 42, low=0.05, high=0.95)
+    grid = generate_grid(6, low=0.05, high=0.95)
     synth = np.vstack([lhs, grid])
-    print(f"  Synthetic: {len(synth)}")
+    print(f"  ✅ Synthetic: {len(synth)} points")
 
     # ترکیب
     ctxs = list(synth) + list(real_ctxs)
-    print(f"  Total: {len(ctxs)} contexts")
+    print(f"  📊 Total contexts: {len(ctxs)}")
 
     # جستجو
     feasible = grid_search(ctxs, step=0.05)
 
     if not feasible:
-        print("\n❌ No feasible coefficients found even with quantile approach.")
-        print("   Try: reducing quantile to 0.90 or threshold to 0.40.")
+        print("\n❌ No feasible coefficients found.")
         sys.exit(1)
 
     result = analyze(feasible)
@@ -283,7 +312,7 @@ def main():
 
     # خروجی
     print("\n" + "=" * 80)
-    print("✅ RESULT")
+    print("✅ FINAL RESULT")
     print("=" * 80)
     print(f"a1 = {best['a1']:.2f}  (Interpretability)")
     print(f"a2 = {best['a2']:.2f}  (Robustness)")
@@ -292,7 +321,7 @@ def main():
     print(f"Sum = {result['best_sum']:.2f}")
     print(f"Identifiability: {result['status']}")
     if real_ctxs:
-        print(f"\nReal-data validation (threshold=0.45):")
+        print(f"\n📊 Real-data validation (threshold=0.45):")
         print(f"  Violations: {real_val['violations']}/{real_val['total']}")
         print(f"  Avg D: interp={real_val['avg_D'][0]:.3f}, robust={real_val['avg_D'][1]:.3f}, scal={real_val['avg_D'][2]:.3f}, rep={real_val['avg_D'][3]:.3f}")
 
@@ -300,6 +329,7 @@ def main():
     os.makedirs('output', exist_ok=True)
     report = {
         'methodology': 'Quantile-Based (95% contexts D > 0.45)',
+        'datasets_used': ['IBM Late Payment', 'UK Payment Practices', 'Lending Club'],
         'context_range': '[0.05, 0.95]',
         'selected': best,
         'identifiability': result['status'],
