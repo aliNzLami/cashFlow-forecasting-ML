@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V6.1 - با فلش لحظه‌ای لاگ‌ها
+Model-Free Calibration V6.2 - با فلش کامل و سرعت بیشتر
 Local datasets (IBM + UK) + Synthetic contexts
 """
 
@@ -11,7 +11,9 @@ import time
 import warnings
 from itertools import product
 
+# ============================================================
 # فلش کردن تمام پرینت‌ها
+# ============================================================
 def pprint(*args, **kwargs):
     kwargs.setdefault('flush', True)
     print(*args, **kwargs)
@@ -29,6 +31,7 @@ except ImportError:
     pprint("Installing numpy...")
     install("numpy")
     import numpy as np
+    sys.stdout.flush()
 
 try:
     import pandas as pd
@@ -36,9 +39,9 @@ except ImportError:
     pprint("Installing pandas...")
     install("pandas")
     import pandas as pd
+    sys.stdout.flush()
 
 warnings.filterwarnings('ignore')
-sys.stdout.flush()
 
 # ============================================================
 # توابع اصلی
@@ -85,16 +88,15 @@ def compute_dominance_ratio(ctx, a1, a2, a3, a4):
 # بارگذاری دیتاست‌های محلی
 # ============================================================
 def load_local_datasets():
-    """بارگذاری IBM و UK از فایل‌های محلی"""
     datasets = []
     ibm_paths = [
-        "WA_Fn-UseC_-Accounts-Receivable.csv",
         "dataset/WA_Fn-UseC_-Accounts-Receivable.csv",
+        "WA_Fn-UseC_-Accounts-Receivable.csv",
         "data/WA_Fn-UseC_-Accounts-Receivable.csv"
     ]
     uk_paths = [
-        "payment-practices.csv",
         "dataset/payment-practices.csv",
+        "payment-practices.csv",
         "data/payment-practices.csv"
     ]
     
@@ -122,6 +124,7 @@ def load_local_datasets():
     else:
         pprint("⚠️ UK not found")
     
+    sys.stdout.flush()
     return datasets
 
 # ============================================================
@@ -170,12 +173,13 @@ def extract_contexts(datasets):
             except Exception as e:
                 pprint(f"  ⚠️ E={E}: {e}")
         pprint(f"  ✅ {len(E_levels)} contexts")
+        sys.stdout.flush()
     return all_ctxs
 
 # ============================================================
-# فضای مصنوعی
+# فضای مصنوعی (کمتر برای سرعت بیشتر)
 # ============================================================
-def generate_latin_hypercube(n=3000, seed=42, low=0.05, high=0.95):
+def generate_latin_hypercube(n=1500, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
     samples = np.zeros((n, 5))
     for j in range(5):
@@ -184,7 +188,7 @@ def generate_latin_hypercube(n=3000, seed=42, low=0.05, high=0.95):
         samples[:, j] = low + (high - low) * raw
     return samples
 
-def generate_grid(steps=7, low=0.05, high=0.95):
+def generate_grid(steps=6, low=0.05, high=0.95):
     grid = np.linspace(low, high, steps)
     return np.array(list(product(grid, repeat=5)))
 
@@ -212,7 +216,7 @@ def check_bounded(ctxs, a1, a2, a3, a4):
     return True
 
 # ============================================================
-# جستجوی شبکه‌ای
+# جستجوی شبکه‌ای (با فلش کامل)
 # ============================================================
 def grid_search(ctxs, step=0.05):
     vals = np.arange(0.50, 0.96, step)
@@ -220,26 +224,39 @@ def grid_search(ctxs, step=0.05):
     total = len(vals) ** 4
     count = 0
     pprint(f"\n🔍 Grid search over {total} combos...")
+    sys.stdout.flush()
+    
     start_time = time.time()
+    last_report_time = start_time
     
     for a1 in vals:
         for a2 in vals:
             for a3 in vals:
                 for a4 in vals:
                     count += 1
-                    if count % 5000 == 0:
-                        elapsed = time.time() - start_time
+                    
+                    # گزارش هر ۱۰۰۰ ترکیب یا هر ۳۰ ثانیه
+                    current_time = time.time()
+                    if count % 1000 == 0 or (current_time - last_report_time) > 30:
+                        elapsed = current_time - start_time
                         pprint(f"  ⏱️ {count}/{total} | {elapsed:.1f}s")
+                        sys.stdout.flush()
+                        last_report_time = current_time
+                    
                     if not check_dominance_quantile(ctxs, a1, a2, a3, a4):
                         continue
                     if not check_bounded(ctxs, a1, a2, a3, a4):
                         continue
+                    
                     feasible.append({
                         'a1': round(a1, 2), 'a2': round(a2, 2),
                         'a3': round(a3, 2), 'a4': round(a4, 2),
                         'sum_a': round(a1 + a2 + a3 + a4, 4)
                     })
+    
     feasible.sort(key=lambda x: x['sum_a'])
+    pprint(f"  ✅ Found {len(feasible)} feasible candidates")
+    sys.stdout.flush()
     return feasible
 
 # ============================================================
@@ -274,14 +291,14 @@ def analyze(feasible):
 # ============================================================
 def main():
     pprint("=" * 80)
-    pprint("🚀 MODEL-FREE CALIBRATION V6.1")
-    pprint("Local datasets + Synthetic | Flushed logs")
+    pprint("🚀 MODEL-FREE CALIBRATION V6.2 (FULL FLUSH)")
+    pprint("Local datasets + Synthetic | Optimized speed")
     pprint("=" * 80)
     sys.stdout.flush()
 
     pprint("\n📂 Loading local datasets...")
-    datasets = load_local_datasets()
     sys.stdout.flush()
+    datasets = load_local_datasets()
 
     real_ctxs = []
     if datasets:
@@ -292,8 +309,9 @@ def main():
     sys.stdout.flush()
 
     pprint("\n🧪 Generating synthetic contexts...")
-    lhs = generate_latin_hypercube(3000, 42, low=0.05, high=0.95)
-    grid = generate_grid(7, low=0.05, high=0.95)
+    sys.stdout.flush()
+    lhs = generate_latin_hypercube(1500, 42, low=0.05, high=0.95)
+    grid = generate_grid(6, low=0.05, high=0.95)  # 6^5 = 7776
     synth_ctxs = np.vstack([lhs, grid])
     pprint(f"  ✅ {len(synth_ctxs)} synthetic contexts")
     sys.stdout.flush()
@@ -302,7 +320,8 @@ def main():
     pprint(f"  📊 Total: {len(all_ctxs)} contexts")
     sys.stdout.flush()
 
-    pprint("\n⏳ Starting grid search (this may take 2-3 minutes)...")
+    pprint("\n⏳ Starting grid search...")
+    pprint("   (This will take 2-4 minutes. Progress reports every 1000 combos)")
     sys.stdout.flush()
     
     feasible = grid_search(all_ctxs, step=0.05)
