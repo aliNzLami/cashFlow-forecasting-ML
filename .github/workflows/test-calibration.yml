@@ -1,34 +1,22 @@
-name: Test Model-Free Calibration (V4)
-
+name: Calibrate
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  
-
+  workflow_dispatch:
 jobs:
-  run-calibration-test:
+  run:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run calibration script (Model-Free)
-      run: |
-        python scripts/calibrate.py
-
-    - name: Upload calibration report
-      uses: actions/upload-artifact@v4
-      with:
-        name: calibration-report
-        path: output/best_coefficients.json
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Run calibration
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: python scripts/calibrate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: output/best_coefficients.json
