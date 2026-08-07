@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Model-Free Calibration V6.0 - FINAL
-با دو دیتاست محلی (IBM و UK) | بدون دانلود | بدون خطا
-Constraint: 95% of contexts must have D > 0.45
+Model-Free Calibration V6.1 - با فلش لحظه‌ای لاگ‌ها
+Local datasets (IBM + UK) + Synthetic contexts
 """
 
 import os
@@ -12,29 +11,34 @@ import time
 import warnings
 from itertools import product
 
+# فلش کردن تمام پرینت‌ها
+def pprint(*args, **kwargs):
+    kwargs.setdefault('flush', True)
+    print(*args, **kwargs)
+
 # ============================================================
-# نصب خودکار کتابخانه‌ها (فقط numpy و pandas)
+# نصب خودکار کتابخانه‌ها
 # ============================================================
 def install(pkg):
+    import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "--quiet"])
 
 try:
     import numpy as np
 except ImportError:
-    import subprocess
-    print("Installing numpy...")
+    pprint("Installing numpy...")
     install("numpy")
     import numpy as np
 
 try:
     import pandas as pd
 except ImportError:
-    import subprocess
-    print("Installing pandas...")
+    pprint("Installing pandas...")
     install("pandas")
     import pandas as pd
 
 warnings.filterwarnings('ignore')
+sys.stdout.flush()
 
 # ============================================================
 # توابع اصلی
@@ -81,15 +85,8 @@ def compute_dominance_ratio(ctx, a1, a2, a3, a4):
 # بارگذاری دیتاست‌های محلی
 # ============================================================
 def load_local_datasets():
-    """
-    بارگذاری دیتاست‌های IBM و UK از فایل‌های محلی.
-    نام فایل‌ها:
-        - IBM: WA_Fn-UseC_-Accounts-Receivable.csv
-        - UK:  payment-practices.csv
-    """
+    """بارگذاری IBM و UK از فایل‌های محلی"""
     datasets = []
-    
-    # مسیرهای احتمالی
     ibm_paths = [
         "WA_Fn-UseC_-Accounts-Receivable.csv",
         "dataset/WA_Fn-UseC_-Accounts-Receivable.csv",
@@ -101,39 +98,34 @@ def load_local_datasets():
         "data/payment-practices.csv"
     ]
     
-    # پیدا کردن IBM
     ibm_file = None
     for p in ibm_paths:
         if os.path.exists(p):
             ibm_file = p
             break
     if ibm_file:
-        print(f"✅ Found IBM dataset: {ibm_file}")
+        pprint(f"✅ Found IBM: {ibm_file}")
         df = pd.read_csv(ibm_file)
         datasets.append(("IBM", df, "target"))
     else:
-        print("⚠️ IBM dataset not found locally.")
+        pprint("⚠️ IBM not found")
     
-    # پیدا کردن UK
     uk_file = None
     for p in uk_paths:
         if os.path.exists(p):
             uk_file = p
             break
     if uk_file:
-        print(f"✅ Found UK dataset: {uk_file}")
+        pprint(f"✅ Found UK: {uk_file}")
         df = pd.read_csv(uk_file)
         datasets.append(("UK", df, "target"))
     else:
-        print("⚠️ UK dataset not found locally.")
-    
-    if not datasets:
-        print("❌ No local datasets found! Using synthetic contexts only.")
+        pprint("⚠️ UK not found")
     
     return datasets
 
 # ============================================================
-# استخراج بافت از DataFrame
+# استخراج بافت
 # ============================================================
 def compute_context_from_df(df, target_col='target', E=0.5):
     X = df.drop(columns=[target_col], errors='ignore')
@@ -166,25 +158,22 @@ def compute_context_from_df(df, target_col='target', E=0.5):
         G = np.clip(np.log10(max(n, 1)) / 6, 0, 1)
     return np.array([V, N, G, rho, E])
 
-def extract_contexts_from_datasets(datasets):
-    """استخراج بافت از دیتاست‌های محلی با ۵ سطح مختلف E"""
+def extract_contexts(datasets):
     all_ctxs = []
     E_levels = [0.0, 0.25, 0.5, 0.75, 1.0]
-    
     for name, df, target_col in datasets:
-        print(f"\n📊 Processing {name}: {df.shape[0]:,} rows, {df.shape[1]} columns")
+        pprint(f"📊 {name}: {df.shape[0]:,} rows")
         for E in E_levels:
             try:
                 ctx = compute_context_from_df(df, target_col, E)
                 all_ctxs.append(ctx)
             except Exception as e:
-                print(f"  ⚠️ Error at E={E}: {e}")
-        print(f"  ✅ Extracted {len(E_levels)} contexts from {name}")
-    
+                pprint(f"  ⚠️ E={E}: {e}")
+        pprint(f"  ✅ {len(E_levels)} contexts")
     return all_ctxs
 
 # ============================================================
-# فضای بافت مصنوعی
+# فضای مصنوعی
 # ============================================================
 def generate_latin_hypercube(n=3000, seed=42, low=0.05, high=0.95):
     np.random.seed(seed)
@@ -230,7 +219,7 @@ def grid_search(ctxs, step=0.05):
     feasible = []
     total = len(vals) ** 4
     count = 0
-    print(f"\n🔍 Grid search over {total} combos...")
+    pprint(f"\n🔍 Grid search over {total} combos...")
     start_time = time.time()
     
     for a1 in vals:
@@ -240,19 +229,16 @@ def grid_search(ctxs, step=0.05):
                     count += 1
                     if count % 5000 == 0:
                         elapsed = time.time() - start_time
-                        print(f"  ⏱️ {count}/{total} | {elapsed:.1f}s")
-                    
+                        pprint(f"  ⏱️ {count}/{total} | {elapsed:.1f}s")
                     if not check_dominance_quantile(ctxs, a1, a2, a3, a4):
                         continue
                     if not check_bounded(ctxs, a1, a2, a3, a4):
                         continue
-                    
                     feasible.append({
                         'a1': round(a1, 2), 'a2': round(a2, 2),
                         'a3': round(a3, 2), 'a4': round(a4, 2),
                         'sum_a': round(a1 + a2 + a3 + a4, 4)
                     })
-    
     feasible.sort(key=lambda x: x['sum_a'])
     return feasible
 
@@ -262,111 +248,100 @@ def grid_search(ctxs, step=0.05):
 def analyze(feasible):
     if not feasible:
         return {'status': 'NO FEASIBLE'}
-    
     best = feasible[0]
     best_sum = best['sum_a']
     near = [c for c in feasible if c['sum_a'] <= best_sum * 1.05]
-    
     ranges = {}
     for k in ['a1', 'a2', 'a3', 'a4']:
         vals = [c[k] for c in near]
         ranges[k] = {'min': min(vals), 'max': max(vals), 'std': round(np.std(vals), 4)}
-    
     if len(near) == 1:
         status = 'STRONG'
     elif any(ranges[k]['std'] > 0.03 for k in ranges):
         status = 'WEAK'
     else:
         status = 'STABLE'
-    
     return {
         'status': status,
         'best': {'a1': best['a1'], 'a2': best['a2'], 'a3': best['a3'], 'a4': best['a4']},
         'best_sum': best_sum,
         'near_count': len(near),
-        'ranges': ranges,
-        'near_optimal': near[:10]
+        'ranges': ranges
     }
 
 # ============================================================
 # اجرا
 # ============================================================
 def main():
-    print("=" * 80)
-    print("🚀 MODEL-FREE CALIBRATION V6.0")
-    print("Local datasets (IBM + UK) + Synthetic contexts")
-    print("Quantile: 95% | Threshold: 0.45")
-    print("=" * 80)
+    pprint("=" * 80)
+    pprint("🚀 MODEL-FREE CALIBRATION V6.1")
+    pprint("Local datasets + Synthetic | Flushed logs")
+    pprint("=" * 80)
+    sys.stdout.flush()
 
-    # --- بارگذاری دیتاست‌های محلی ---
-    print("\n📂 Loading local datasets...")
+    pprint("\n📂 Loading local datasets...")
     datasets = load_local_datasets()
-    
-    # --- استخراج بافت از دیتاست‌های محلی ---
+    sys.stdout.flush()
+
     real_ctxs = []
     if datasets:
-        real_ctxs = extract_contexts_from_datasets(datasets)
-        print(f"\n✅ {len(real_ctxs)} real contexts extracted.")
+        real_ctxs = extract_contexts(datasets)
+        pprint(f"\n✅ {len(real_ctxs)} real contexts")
     else:
-        print("\n⚠️ No datasets found. Using only synthetic contexts.")
-    
-    # --- فضای مصنوعی ---
-    print("\n🧪 Generating synthetic contexts...")
+        pprint("\n⚠️ No local datasets. Synthetic only.")
+    sys.stdout.flush()
+
+    pprint("\n🧪 Generating synthetic contexts...")
     lhs = generate_latin_hypercube(3000, 42, low=0.05, high=0.95)
     grid = generate_grid(7, low=0.05, high=0.95)
     synth_ctxs = np.vstack([lhs, grid])
-    print(f"  ✅ {len(synth_ctxs)} synthetic contexts")
-    
-    # --- ترکیب ---
+    pprint(f"  ✅ {len(synth_ctxs)} synthetic contexts")
+    sys.stdout.flush()
+
     all_ctxs = list(synth_ctxs) + list(real_ctxs)
-    print(f"  📊 Total contexts: {len(all_ctxs)}")
+    pprint(f"  📊 Total: {len(all_ctxs)} contexts")
+    sys.stdout.flush()
+
+    pprint("\n⏳ Starting grid search (this may take 2-3 minutes)...")
+    sys.stdout.flush()
     
-    # --- جستجو ---
     feasible = grid_search(all_ctxs, step=0.05)
-    
+
     if not feasible:
-        print("\n❌ No feasible coefficients found.")
+        pprint("\n❌ No feasible coefficients found.")
         sys.exit(1)
-    
+
     result = analyze(feasible)
     best = result['best']
-    
-    # --- خروجی ---
-    print("\n" + "=" * 80)
-    print("✅ FINAL RESULT")
-    print("=" * 80)
-    print(f"a1 = {best['a1']:.2f}  (Interpretability)")
-    print(f"a2 = {best['a2']:.2f}  (Robustness)")
-    print(f"a3 = {best['a3']:.2f}  (Scalability)")
-    print(f"a4 = {best['a4']:.2f}  (Rep. Capacity)")
-    print(f"Sum = {result['best_sum']:.2f}")
-    print(f"Identifiability: {result['status']}")
-    
-    if result['status'] == 'WEAK':
-        print("\n  Near-optimal ranges:")
-        for k, v in result['ranges'].items():
-            print(f"    {k}: [{v['min']:.2f}, {v['max']:.2f}] (std={v['std']:.3f})")
-    
-    # --- ذخیره JSON ---
+
+    pprint("\n" + "=" * 80)
+    pprint("✅ FINAL RESULT")
+    pprint("=" * 80)
+    pprint(f"a1 = {best['a1']:.2f}  (Interpretability)")
+    pprint(f"a2 = {best['a2']:.2f}  (Robustness)")
+    pprint(f"a3 = {best['a3']:.2f}  (Scalability)")
+    pprint(f"a4 = {best['a4']:.2f}  (Rep. Capacity)")
+    pprint(f"Sum = {result['best_sum']:.2f}")
+    pprint(f"Identifiability: {result['status']}")
+    sys.stdout.flush()
+
     os.makedirs('output', exist_ok=True)
     report = {
         'methodology': 'Quantile-Based (95% contexts D > 0.45)',
-        'datasets_used': [name for name, _, _ in datasets] if datasets else ['NONE'],
-        'context_range': '[0.05, 0.95]',
+        'datasets_used': [name for name, _, _ in datasets],
         'synthetic_contexts': len(synth_ctxs),
         'real_contexts': len(real_ctxs),
         'total_contexts': len(all_ctxs),
         'selected': best,
         'identifiability': result['status'],
         'near_optimal_count': result['near_count'],
-        'coefficient_ranges': result['ranges'],
-        'near_optimal_sets': result['near_optimal']
+        'coefficient_ranges': result['ranges']
     }
     with open('output/best_coefficients.json', 'w') as f:
         json.dump(report, f, indent=4)
-    
-    print("\n📁 Report saved to output/best_coefficients.json")
-    print("=" * 80)
+
+    pprint("\n📁 Report saved to output/best_coefficients.json")
+    pprint("=" * 80)
 
 if __name__ == "__main__":
     main()
