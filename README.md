@@ -2,30 +2,14 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Paper](https://img.shields.io/badge/Paper-Submitted_to_Applied_Intelligence-brightgreen.svg)]()
+[![Paper](https://img.shields.io/badge/Paper-Submitted_to_Journal_of_Economic_and_Management-brightgreen.svg)]()
 
 This repository contains the official implementation and replication code for the research paper:
 
-> **"A Context-Aware Compatibility Framework for SME Cash Flow Forecasting: A Leakage-Free Evaluation of Accuracy and Interpretability"**  
-> *Submitted to Applied Intelligence (Springer)*
+> **"A Mathematical Pre‑Screening Framework for Training‑Free Model Selection in Time‑Series Forecasting"**  
+> *Journal of Economic & Management*
 
-This study rigorously evaluates five machine learning models—**Linear Regression, Random Forest, XGBoost, LightGBM, and Neural Network (MLP)**—for predicting SME cash flow. Unlike prior studies, we strictly prevent **look-ahead bias** using time-series validation, and we introduce a **novel context-aware decision framework** based on **continuous mapping functions** to recommend the optimal model **before any training**, without relying on expensive AutoML or heuristic weighting schemes.
-
----
-
-## 📄 Overview
-
-Small and Medium Enterprises (SMEs) face significant liquidity risks due to unpredictable payment delays. While advanced ML models promise high accuracy, they often fail in practice due to **data leakage** and **lack of interpretability**.
-
-**Our key contributions are:**
-
-1. **Leakage-Free Validation:** Removal of future-dependent features (e.g., `DaysLate`) and strict chronological train/test splits for realistic performance estimates.
-2. **Comprehensive Interpretability:** Comparison of TreeSHAP, TreeInterpreter, LIME, and Captum (Integrated Gradients/DeepLIFT) across five models, revealing internal inconsistencies in Neural Network attributions.
-3. **The Context-Aware Compatibility Framework (Training-Free):** 
-   - Translates **5 contextual attributes** (data volume, noise level, granularity, feature-to-instance ratio, and user expertise) into **4 operational requirements** (interpretability, robustness, scalability, and representation capacity) via **continuous mathematical functions** (sigmoid and hyperbolic tangent).
-   - Uses a **coefficient-based weighting scheme** (derived from the same functions, not data-dependent heuristics like CRITIC) with normalised weights: **Interpretability (0.293), Robustness (0.241), Scalability (0.276), and Representation Capacity (0.190)**.
-   - Recommends models via a **compatibility score** (Manhattan distance) with **O(m·k)** computational complexity—deployable on standard office hardware.
-4. **Empirical Validation:** Tested on two real-world SME datasets (IBM invoice-level, UK Government firm-level) and externally validated on the Lending Club dataset under three managerial expertise scenarios (non-expert, intermediate, expert).
+We evaluate five machine learning models, Linear Regression, Random Forest, XGBoost, LightGBM, and a Neural Network (MLP), for predicting cash flow in small and medium enterprises. Our work has two main pillars. First, we apply strict time-validated splits and remove future-dependent features to prevent look-ahead bias. This gives a realistic picture of model performance. Second, we introduce a context-aware decision framework that recommends the optimal model before any training begins. The framework uses continuous mapping functions derived from theory and calibrated on real SME data. It does not rely on expensive AutoML or heuristic weighting schemes. The framework translates five contextual attributes, (data volume, noise level, granularity, feature-to-instance ratio, and user expertise) into four operational requirements: interpretability, robustness, scalability, and representation capacity. A compatibility score then identifies the best-aligned model.
 
 ---
 
@@ -99,9 +83,11 @@ The underlying datasets retain their respective licenses (IBM under CC BY 4.0; U
 
 ## 🤝 Acknowledgments
 
-- The authors would like to thank the open-source communities behind Scikit-learn, XGBoost, LightGBM, SHAP, and Captum.
-- The UK Government for providing the Payment Practices dataset under OGL v3.0.
-- Smart Data Foundry (SDF) for informing our understanding of SME data structures, though access to their microdata was beyond the scope of this study.
+The author thank the open-source communities behind Scikit-learn, XGBoost, LightGBM, SHAP, and Captum for their contributions. 
+
+We also thank the providers of the three datasets used in this study: IBM for the Late Payment Histories dataset, the UK Government for the Payment Practices dataset under the Open Government Licence v3.0, and Lending Club for the Loan Data dataset. 
+
+We further acknowledge Kaggle as the platform that made these datasets publicly accessible.
 
 ---
 
