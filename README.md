@@ -1,4 +1,4 @@
-# Decision-Making Framework on ML Model Selection for SME's Cash Flow Forecasting
+# About Project
 
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -8,7 +8,8 @@ This repository contains the official implementation and replication code for th
 
 > **"A Mathematical Pre‑Screening Framework for Training‑Free Model Selection in Time‑Series Forecasting"**  
 > *Journal of Economic & Management*
-> ORCID: 0009-0005-0811-8091
+> 
+> **ORCID: 0009-0005-0811-8091**
 
 We evaluate five machine learning models, Linear Regression, Random Forest, XGBoost, LightGBM, and a Neural Network (MLP), for predicting cash flow in small and medium enterprises. Our work has two main pillars. First, we apply strict time-validated splits and remove future-dependent features to prevent look-ahead bias. This gives a realistic picture of model performance. Second, we introduce a context-aware decision framework that recommends the optimal model before any training begins. The framework uses continuous mapping functions derived from theory and calibrated on real SME data. It does not rely on expensive AutoML or heuristic weighting schemes. The framework translates five contextual attributes, (data volume, noise level, granularity, feature-to-instance ratio, and user expertise) into four operational requirements: interpretability, robustness, scalability, and representation capacity. A compatibility score then identifies the best-aligned model.
 
