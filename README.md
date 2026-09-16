@@ -103,10 +103,9 @@ We further acknowledge Kaggle as the platform that made these datasets publicly 
 
 For questions, issues, or requests regarding the code, please open an issue on this GitHub repository or contact:
 
-lamiry@financetech.dev
+- Email: lamiry@financetech.dev
+- Researchgate: https://www.researchgate.net/profile/Ali-Nabizade-Lamiry?ev=hdr_xprf
 
 Ali Nabizadeh Lamiry
-
-ali.nabizadeh79@yahoo.com
 
 
