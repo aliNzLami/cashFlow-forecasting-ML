@@ -105,6 +105,7 @@ For questions, issues, or requests regarding the code, please open an issue on t
 
 - Email: lamiry@financetech.dev
 - Researchgate: https://www.researchgate.net/profile/Ali-Nabizade-Lamiry?ev=hdr_xprf
+- Website: http://lamiry.netlify.app/
 
 Ali Nabizadeh Lamiry
 
